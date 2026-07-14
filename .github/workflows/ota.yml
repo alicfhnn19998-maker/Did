@@ -8,11 +8,13 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   ota:
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,29 +25,191 @@ jobs:
           mkdir -p manifests
           mkdir -p public
 
-      - name: List IPA files
+      - name: Find IPA files
+        id: find_ipa
         run: |
           echo "Searching for IPA files..."
-          find apps -name "*.ipa" || true
+          ipa_files=$(find apps -name "*.ipa" -type f)
+          echo "ipa_files=$ipa_files" >> $GITHUB_OUTPUT
+          echo "Found IPA files:"
+          echo "$ipa_files"
 
-      - name: Generate index.html
+      - name: Generate apps.json
+        run: |
+          cat > public/apps.json <<'EOF'
+          {
+            "apps": []
+          }
+          EOF
+          
+          # If there are IPA files, generate proper JSON
+          if [ -n "$(find apps -name '*.ipa' -type f)" ]; then
+            echo "[" > public/apps_temp.json
+            first=true
+            for ipa in $(find apps -name "*.ipa" -type f); do
+              filename=$(basename "$ipa")
+              name="${filename%.*}"
+              bundle_id=$(echo "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9]/-/g')
+              
+              if [ "$first" = true ]; then
+                first=false
+              else
+                echo "," >> public/apps_temp.json
+              fi
+              
+              cat >> public/apps_temp.json <<EOF
+              {
+                "name": "$name",
+                "bundle_id": "com.example.$bundle_id",
+                "ipa": "$filename",
+                "icon": "",
+                "version": "1.0"
+              }
+EOF
+            done
+            echo "]" >> public/apps_temp.json
+            mv public/apps_temp.json public/apps.json
+          fi
+
+      - name: Generate manifest for each IPA
+        run: |
+          for ipa in $(find apps -name "*.ipa" -type f); do
+            filename=$(basename "$ipa")
+            name="${filename%.*}"
+            bundle_id=$(echo "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9]/-/g')
+            
+            # Get file size and generate MD5
+            size=$(stat -c%s "$ipa")
+            md5=$(md5sum "$ipa" | cut -d' ' -f1)
+            
+            # Generate manifest.plist
+            cat > "manifests/${name}.plist" <<EOF
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+              <key>items</key>
+              <array>
+                <dict>
+                  <key>assets</key>
+                  <array>
+                    <dict>
+                      <key>kind</key>
+                      <string>software-package</string>
+                      <key>url</key>
+                      <string>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/apps/${filename}</string>
+                    </dict>
+                  </array>
+                  <key>metadata</key>
+                  <dict>
+                    <key>bundle-identifier</key>
+                    <string>com.example.${bundle_id}</string>
+                    <key>bundle-version</key>
+                    <string>1.0</string>
+                    <key>kind</key>
+                    <string>software</string>
+                    <key>title</key>
+                    <string>${name}</string>
+                  </dict>
+                </dict>
+              </array>
+            </dict>
+            </plist>
+EOF
+          done
+
+      - name: Generate itms-services links
+        run: |
+          cat > public/install_links.html <<'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>OTA Installer - Install Apps</title>
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+              .app-card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: space-between; }
+              .app-name { font-size: 18px; font-weight: 600; }
+              .install-btn { background: #007aff; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-size: 16px; cursor: pointer; text-decoration: none; display: inline-block; }
+              .install-btn:hover { background: #0056b3; }
+              .no-apps { text-align: center; padding: 40px; color: #666; }
+              .header { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+              h1 { margin: 0; color: #333; }
+              .subtitle { color: #666; margin-top: 5px; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>📱 OTA Installer</h1>
+              <div class="subtitle">Install iOS apps directly from your browser</div>
+            </div>
+            <div id="apps-container">
+              <div class="no-apps">Loading apps...</div>
+            </div>
+            <script>
+              fetch('apps.json')
+                .then(res => res.json())
+                .then(data => {
+                  const container = document.getElementById('apps-container');
+                  if (!data.apps || data.apps.length === 0) {
+                    container.innerHTML = '<div class="no-apps">No apps available. Upload IPA files to the apps folder.</div>';
+                    return;
+                  }
+                  let html = '';
+                  data.apps.forEach(app => {
+                    const manifestUrl = `https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/manifests/${app.name}.plist`;
+                    const installUrl = `itms-services://?action=download-manifest&url=${encodeURIComponent(manifestUrl)}`;
+                    html += `
+                      <div class="app-card">
+                        <div>
+                          <div class="app-name">${app.name}</div>
+                          <div style="color: #666; font-size: 14px;">${app.bundle_id}</div>
+                          <div style="color: #666; font-size: 12px;">Version ${app.version}</div>
+                        </div>
+                        <a href="${installUrl}" class="install-btn">Install</a>
+                      </div>
+                    `;
+                  });
+                  container.innerHTML = html;
+                })
+                .catch(err => {
+                  document.getElementById('apps-container').innerHTML = '<div class="no-apps">Error loading apps. Please try again.</div>';
+                });
+            </script>
+          </body>
+          </html>
+EOF
+
+      - name: Generate main index.html
         run: |
           cat > public/index.html <<'EOF'
           <!DOCTYPE html>
           <html>
           <head>
             <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="refresh" content="0; url=install_links.html">
             <title>OTA Installer</title>
           </head>
           <body>
-            <h1>OTA Installer</h1>
-            <p>Upload IPA files to the apps folder.</p>
+            <p>Redirecting to <a href="install_links.html">Install Links</a>...</p>
           </body>
           </html>
-          EOF
+EOF
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: ota-site
           path: public
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
+
+      - name: Commit and push generated files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/ manifests/ apps.json 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "Update OTA builds [skip ci]"
+          git push
