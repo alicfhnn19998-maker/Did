@@ -1,0 +1,124 @@
+name: OTA Builder
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ota:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create Required Folders
+        run: |
+          mkdir -p apps
+          mkdir -p manifests
+          mkdir -p public
+          mkdir -p icons
+
+      - name: Find IPA Files
+        id: ipa
+        run: |
+          IPA_COUNT=$(find apps -name "*.ipa" | wc -l)
+          echo "count=$IPA_COUNT" >> $GITHUB_OUTPUT
+
+          if [ "$IPA_COUNT" -eq "0" ]; then
+            echo "No IPA files found."
+            exit 0
+          fi
+
+          echo "IPA files:"
+          find apps -name "*.ipa"
+
+      - name: Generate Placeholder Manifest Files
+        if: steps.ipa.outputs.count != '0'
+        run: |
+          for ipa in apps/*.ipa; do
+            [ -f "$ipa" ] || continue
+            app=$(basename "$ipa" .ipa)
+
+            cat > manifests/${app}.plist <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+"http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>items</key>
+  <array>
+    <dict>
+      <key>assets</key>
+      <array>
+        <dict>
+          <key>kind</key>
+          <string>software-package</string>
+          <key>url</key>
+          <string>https://YOUR_USERNAME.github.io/YOUR_REPO/apps/${app}.ipa</string>
+        </dict>
+      </array>
+
+      <key>metadata</key>
+      <dict>
+        <key>bundle-identifier</key>
+        <string>com.example.${app}</string>
+
+        <key>bundle-version</key>
+        <string>1.0</string>
+
+        <key>kind</key>
+        <string>software</string>
+
+        <key>title</key>
+        <string>${app}</string>
+      </dict>
+    </dict>
+  </array>
+</dict>
+</plist>
+EOF
+          done
+
+      - name: Generate Index
+        run: |
+          cat > public/index.html <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>OTA Installer</title>
+</head>
+<body>
+<h1>OTA Applications</h1>
+
+<ul>
+EOF
+
+          for plist in manifests/*.plist; do
+            [ -f "$plist" ] || continue
+            name=$(basename "$plist" .plist)
+
+            echo "<li>" >> public/index.html
+            echo "<a href=\"itms-services://?action=download-manifest&url=https://YOUR_USERNAME.github.io/YOUR_REPO/manifests/${name}.plist\">Install ${name}</a>" >> public/index.html
+            echo "</li>" >> public/index.html
+          done
+
+          cat >> public/index.html <<EOF
+</ul>
+</body>
+</html>
+EOF
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-site
+          path: |
+            public
+            manifests
