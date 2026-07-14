@@ -29,27 +29,29 @@ jobs:
         id: find_ipa
         run: |
           echo "Searching for IPA files..."
-          ipa_files=$(find apps -name "*.ipa" -type f)
-          echo "ipa_files=$ipa_files" >> $GITHUB_OUTPUT
-          echo "Found IPA files:"
-          echo "$ipa_files"
+          if [ -d "apps" ]; then
+            ipa_files=$(find apps -name "*.ipa" -type f 2>/dev/null || echo "")
+            echo "ipa_files=$ipa_files" >> $GITHUB_OUTPUT
+            echo "Found IPA files:"
+            echo "$ipa_files"
+          else
+            echo "ipa_files=" >> $GITHUB_OUTPUT
+            echo "No apps folder found"
+          fi
 
       - name: Generate apps.json
         run: |
-          cat > public/apps.json <<'EOF'
-          {
-            "apps": []
-          }
-          EOF
+          # Create initial JSON
+          echo '{"apps": []}' > public/apps.json
           
-          # If there are IPA files, generate proper JSON
-          if [ -n "$(find apps -name '*.ipa' -type f)" ]; then
+          # Check if there are IPA files
+          if [ -d "apps" ] && [ -n "$(find apps -name '*.ipa' -type f 2>/dev/null)" ]; then
             echo "[" > public/apps_temp.json
             first=true
-            for ipa in $(find apps -name "*.ipa" -type f); do
+            for ipa in $(find apps -name "*.ipa" -type f 2>/dev/null); do
               filename=$(basename "$ipa")
               name="${filename%.*}"
-              bundle_id=$(echo "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9]/-/g')
+              bundle_id=$(echo "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
               
               if [ "$first" = true ]; then
                 first=false
@@ -73,130 +75,297 @@ EOF
 
       - name: Generate manifest for each IPA
         run: |
-          for ipa in $(find apps -name "*.ipa" -type f); do
-            filename=$(basename "$ipa")
-            name="${filename%.*}"
-            bundle_id=$(echo "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9]/-/g')
-            
-            # Get file size and generate MD5
-            size=$(stat -c%s "$ipa")
-            md5=$(md5sum "$ipa" | cut -d' ' -f1)
-            
-            # Generate manifest.plist
-            cat > "manifests/${name}.plist" <<EOF
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            <plist version="1.0">
-            <dict>
-              <key>items</key>
-              <array>
-                <dict>
-                  <key>assets</key>
-                  <array>
-                    <dict>
-                      <key>kind</key>
-                      <string>software-package</string>
-                      <key>url</key>
-                      <string>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/apps/${filename}</string>
-                    </dict>
-                  </array>
-                  <key>metadata</key>
-                  <dict>
-                    <key>bundle-identifier</key>
-                    <string>com.example.${bundle_id}</string>
-                    <key>bundle-version</key>
-                    <string>1.0</string>
-                    <key>kind</key>
-                    <string>software</string>
-                    <key>title</key>
-                    <string>${name}</string>
-                  </dict>
-                </dict>
-              </array>
-            </dict>
-            </plist>
+          if [ -d "apps" ] && [ -n "$(find apps -name '*.ipa' -type f 2>/dev/null)" ]; then
+            for ipa in $(find apps -name "*.ipa" -type f 2>/dev/null); do
+              filename=$(basename "$ipa")
+              name="${filename%.*}"
+              bundle_id=$(echo "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+              
+              # Get file size and generate MD5
+              if [ -f "$ipa" ]; then
+                size=$(stat -c%s "$ipa" 2>/dev/null || echo "0")
+                md5=$(md5sum "$ipa" 2>/dev/null | cut -d' ' -f1 || echo "")
+              else
+                size="0"
+                md5=""
+              fi
+              
+              # Generate manifest.plist
+              cat > "manifests/${name}.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>items</key>
+  <array>
+    <dict>
+      <key>assets</key>
+      <array>
+        <dict>
+          <key>kind</key>
+          <string>software-package</string>
+          <key>url</key>
+          <string>https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/apps/${filename}</string>
+        </dict>
+      </array>
+      <key>metadata</key>
+      <dict>
+        <key>bundle-identifier</key>
+        <string>com.example.${bundle_id}</string>
+        <key>bundle-version</key>
+        <string>1.0</string>
+        <key>kind</key>
+        <string>software</string>
+        <key>title</key>
+        <string>${name}</string>
+      </dict>
+    </dict>
+  </array>
+</dict>
+</plist>
 EOF
-          done
+              echo "Generated manifest for: $name"
+            done
+          else
+            echo "No IPA files found to generate manifests"
+          fi
 
-      - name: Generate itms-services links
+      - name: Generate install_links.html
         run: |
-          cat > public/install_links.html <<'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>OTA Installer - Install Apps</title>
-            <style>
-              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
-              .app-card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: space-between; }
-              .app-name { font-size: 18px; font-weight: 600; }
-              .install-btn { background: #007aff; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-size: 16px; cursor: pointer; text-decoration: none; display: inline-block; }
-              .install-btn:hover { background: #0056b3; }
-              .no-apps { text-align: center; padding: 40px; color: #666; }
-              .header { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-              h1 { margin: 0; color: #333; }
-              .subtitle { color: #666; margin-top: 5px; }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <h1>📱 OTA Installer</h1>
-              <div class="subtitle">Install iOS apps directly from your browser</div>
+          cat > public/install_links.html <<'"EOF"'
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OTA Installer - Install Apps</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; 
+      max-width: 800px; 
+      margin: 0 auto; 
+      padding: 20px; 
+      background: #f5f5f5;
+      min-height: 100vh;
+    }
+    .header { 
+      background: white; 
+      padding: 24px; 
+      border-radius: 16px; 
+      margin-bottom: 24px; 
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      text-align: center;
+    }
+    h1 { 
+      margin: 0; 
+      color: #1a1a1a;
+      font-size: 28px;
+      font-weight: 700;
+    }
+    .subtitle { 
+      color: #666; 
+      margin-top: 8px;
+      font-size: 16px;
+    }
+    .app-card { 
+      background: white; 
+      border-radius: 16px; 
+      padding: 20px 24px; 
+      margin-bottom: 16px; 
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      display: flex; 
+      align-items: center; 
+      justify-content: space-between;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .app-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    .app-info { 
+      flex: 1;
+      margin-right: 16px;
+    }
+    .app-name { 
+      font-size: 18px; 
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+    .app-details { 
+      color: #666; 
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    .app-version {
+      color: #999;
+      font-size: 12px;
+      margin-top: 2px;
+    }
+    .install-btn { 
+      background: #007aff; 
+      color: white; 
+      border: none; 
+      padding: 10px 28px; 
+      border-radius: 20px; 
+      font-size: 16px; 
+      font-weight: 500;
+      cursor: pointer; 
+      text-decoration: none; 
+      display: inline-block;
+      transition: background 0.2s, transform 0.2s;
+      white-space: nowrap;
+    }
+    .install-btn:hover { 
+      background: #0056b3;
+      transform: scale(1.02);
+    }
+    .install-btn:active {
+      transform: scale(0.98);
+    }
+    .no-apps { 
+      text-align: center; 
+      padding: 60px 20px; 
+      color: #666;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .no-apps-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+    .loading-spinner {
+      display: inline-block;
+      width: 40px;
+      height: 40px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #007aff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .footer {
+      text-align: center;
+      margin-top: 40px;
+      color: #999;
+      font-size: 14px;
+    }
+    @media (max-width: 600px) {
+      .app-card {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 16px;
+      }
+      .app-info {
+        margin-right: 0;
+        margin-bottom: 12px;
+      }
+      .install-btn {
+        text-align: center;
+        padding: 12px;
+      }
+      body {
+        padding: 12px;
+      }
+      .header {
+        padding: 16px;
+      }
+      h1 {
+        font-size: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>📱 OTA Installer</h1>
+    <div class="subtitle">Install iOS apps directly from your browser</div>
+  </div>
+  <div id="apps-container">
+    <div class="loading">
+      <div class="loading-spinner"></div>
+      <div>Loading apps...</div>
+    </div>
+  </div>
+  <div class="footer">
+    <p>Made with ❤️ • OTA Installer</p>
+  </div>
+  <script>
+    fetch('apps.json')
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to load apps');
+        return res.json();
+      })
+      .then(data => {
+        const container = document.getElementById('apps-container');
+        if (!data.apps || data.apps.length === 0) {
+          container.innerHTML = `
+            <div class="no-apps">
+              <div class="no-apps-icon">📦</div>
+              <h3>No apps available</h3>
+              <p>Upload IPA files to the apps folder to get started.</p>
             </div>
-            <div id="apps-container">
-              <div class="no-apps">Loading apps...</div>
+          `;
+          return;
+        }
+        let html = '';
+        data.apps.forEach(app => {
+          const repoName = window.location.pathname.split('/')[1] || '';
+          const manifestUrl = `https://${window.location.hostname}/${repoName}/manifests/${encodeURIComponent(app.name)}.plist`;
+          const installUrl = `itms-services://?action=download-manifest&url=${encodeURIComponent(manifestUrl)}`;
+          html += `
+            <div class="app-card">
+              <div class="app-info">
+                <div class="app-name">${app.name}</div>
+                <div class="app-details">${app.bundle_id}</div>
+                <div class="app-version">Version ${app.version}</div>
+              </div>
+              <a href="${installUrl}" class="install-btn">📲 Install</a>
             </div>
-            <script>
-              fetch('apps.json')
-                .then(res => res.json())
-                .then(data => {
-                  const container = document.getElementById('apps-container');
-                  if (!data.apps || data.apps.length === 0) {
-                    container.innerHTML = '<div class="no-apps">No apps available. Upload IPA files to the apps folder.</div>';
-                    return;
-                  }
-                  let html = '';
-                  data.apps.forEach(app => {
-                    const manifestUrl = `https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/manifests/${app.name}.plist`;
-                    const installUrl = `itms-services://?action=download-manifest&url=${encodeURIComponent(manifestUrl)}`;
-                    html += `
-                      <div class="app-card">
-                        <div>
-                          <div class="app-name">${app.name}</div>
-                          <div style="color: #666; font-size: 14px;">${app.bundle_id}</div>
-                          <div style="color: #666; font-size: 12px;">Version ${app.version}</div>
-                        </div>
-                        <a href="${installUrl}" class="install-btn">Install</a>
-                      </div>
-                    `;
-                  });
-                  container.innerHTML = html;
-                })
-                .catch(err => {
-                  document.getElementById('apps-container').innerHTML = '<div class="no-apps">Error loading apps. Please try again.</div>';
-                });
-            </script>
-          </body>
-          </html>
-EOF
+          `;
+        });
+        container.innerHTML = html;
+      })
+      .catch(err => {
+        console.error('Error loading apps:', err);
+        document.getElementById('apps-container').innerHTML = `
+          <div class="no-apps">
+            <div class="no-apps-icon">⚠️</div>
+            <h3>Error loading apps</h3>
+            <p>Please try again later or contact support.</p>
+          </div>
+        `;
+      });
+  </script>
+</body>
+</html>
+"EOF"
 
       - name: Generate main index.html
         run: |
-          cat > public/index.html <<'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <meta http-equiv="refresh" content="0; url=install_links.html">
-            <title>OTA Installer</title>
-          </head>
-          <body>
-            <p>Redirecting to <a href="install_links.html">Install Links</a>...</p>
-          </body>
-          </html>
-EOF
+          cat > public/index.html <<'"EOF"'
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="refresh" content="0; url=install_links.html">
+  <title>OTA Installer</title>
+</head>
+<body>
+  <p>Redirecting to <a href="install_links.html">Install Links</a>...</p>
+</body>
+</html>
+"EOF"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -210,6 +379,22 @@ EOF
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add public/ manifests/ apps.json 2>/dev/null || true
-          git diff --staged --quiet || git commit -m "Update OTA builds [skip ci]"
-          git push
+          
+          # Add files if they exist
+          if [ -d "public" ] && [ "$(ls -A public 2>/dev/null)" ]; then
+            git add public/ || true
+          fi
+          if [ -d "manifests" ] && [ "$(ls -A manifests 2>/dev/null)" ]; then
+            git add manifests/ || true
+          fi
+          if [ -f "public/apps.json" ]; then
+            git add public/apps.json || true
+          fi
+          
+          # Commit if there are changes
+          if ! git diff --staged --quiet; then
+            git commit -m "Update OTA builds [skip ci]"
+            git push
+          else
+            echo "No changes to commit"
+          fi
