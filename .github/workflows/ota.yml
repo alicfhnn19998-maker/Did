@@ -14,7 +14,7 @@ permissions:
 jobs:
   ota:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,7 +43,7 @@ jobs:
         run: |
           # Create initial JSON
           echo '{"apps": []}' > public/apps.json
-          
+
           # Check if there are IPA files
           if [ -d "apps" ] && [ -n "$(find apps -name '*.ipa' -type f 2>/dev/null)" ]; then
             echo "[" > public/apps_temp.json
@@ -52,22 +52,22 @@ jobs:
               filename=$(basename "$ipa")
               name="${filename%.*}"
               bundle_id=$(echo "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
-              
+
               if [ "$first" = true ]; then
                 first=false
               else
                 echo "," >> public/apps_temp.json
               fi
-              
-              cat >> public/apps_temp.json <<EOF
+
               {
-                "name": "$name",
-                "bundle_id": "com.example.$bundle_id",
-                "ipa": "$filename",
-                "icon": "",
-                "version": "1.0"
-              }
-EOF
+                echo "  {"
+                echo "    \"name\": \"$name\","
+                echo "    \"bundle_id\": \"com.example.$bundle_id\","
+                echo "    \"ipa\": \"$filename\","
+                echo "    \"icon\": \"\","
+                echo "    \"version\": \"1.0\""
+                echo "  }"
+              } >> public/apps_temp.json
             done
             echo "]" >> public/apps_temp.json
             mv public/apps_temp.json public/apps.json
@@ -80,41 +80,42 @@ EOF
               filename=$(basename "$ipa")
               name="${filename%.*}"
               bundle_id=$(echo "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
-              
+
               # Generate manifest.plist
-              cat > "manifests/${name}.plist" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>items</key>
-  <array>
-    <dict>
-      <key>assets</key>
-      <array>
-        <dict>
-          <key>kind</key>
-          <string>software-package</string>
-          <key>url</key>
-          <string>https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/apps/${filename}</string>
-        </dict>
-      </array>
-      <key>metadata</key>
-      <dict>
-        <key>bundle-identifier</key>
-        <string>com.example.${bundle_id}</string>
-        <key>bundle-version</key>
-        <string>1.0</string>
-        <key>kind</key>
-        <string>software</string>
-        <key>title</key>
-        <string>${name}</string>
-      </dict>
-    </dict>
-  </array>
-</dict>
-</plist>
-EOF
+              {
+                echo '<?xml version="1.0" encoding="UTF-8"?>'
+                echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+                echo '<plist version="1.0">'
+                echo '<dict>'
+                echo '  <key>items</key>'
+                echo '  <array>'
+                echo '    <dict>'
+                echo '      <key>assets</key>'
+                echo '      <array>'
+                echo '        <dict>'
+                echo '          <key>kind</key>'
+                echo '          <string>software-package</string>'
+                echo '          <key>url</key>'
+                echo "          <string>https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/apps/${filename}</string>"
+                echo '        </dict>'
+                echo '      </array>'
+                echo '      <key>metadata</key>'
+                echo '      <dict>'
+                echo '        <key>bundle-identifier</key>'
+                echo "        <string>com.example.${bundle_id}</string>"
+                echo '        <key>bundle-version</key>'
+                echo '        <string>1.0</string>'
+                echo '        <key>kind</key>'
+                echo '        <string>software</string>'
+                echo '        <key>title</key>'
+                echo "        <string>${name}</string>"
+                echo '      </dict>'
+                echo '    </dict>'
+                echo '  </array>'
+                echo '</dict>'
+                echo '</plist>'
+              } > "manifests/${name}.plist"
+
               echo "Generated manifest for: $name"
             done
           else
@@ -222,7 +223,7 @@ EOF
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
+
           # Add files if they exist
           if [ -d "public" ] && [ "$(ls -A public 2>/dev/null)" ]; then
             git add public/ || true
@@ -233,7 +234,7 @@ EOF
           if [ -f "public/apps.json" ]; then
             git add public/apps.json || true
           fi
-          
+
           # Commit if there are changes
           if ! git diff --staged --quiet; then
             git commit -m "Update OTA builds [skip ci]"
