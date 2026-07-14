@@ -11,10 +11,13 @@ permissions:
   pages: write
   id-token: write
 
-jobs:
-  ota:
-    runs-on: ubuntu-latest
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
+jobs:
+  build:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,10 +44,8 @@ jobs:
 
       - name: Generate apps.json
         run: |
-          # Create initial JSON
           echo '{"apps": []}' > public/apps.json
 
-          # Check if there are IPA files
           if [ -d "apps" ] && [ -n "$(find apps -name '*.ipa' -type f 2>/dev/null)" ]; then
             echo "[" > public/apps_temp.json
             first=true
@@ -81,7 +82,6 @@ jobs:
               name="${filename%.*}"
               bundle_id=$(echo "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
 
-              # Generate manifest.plist
               {
                 echo '<?xml version="1.0" encoding="UTF-8"?>'
                 echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
@@ -145,100 +145,4 @@ jobs:
           echo '    .install-btn { background: #007aff; color: white; border: none; padding: 10px 28px; border-radius: 20px; font-size: 16px; font-weight: 500; cursor: pointer; text-decoration: none; display: inline-block; transition: background 0.2s, transform 0.2s; white-space: nowrap; }' >> public/install_links.html
           echo '    .install-btn:hover { background: #0056b3; transform: scale(1.02); }' >> public/install_links.html
           echo '    .install-btn:active { transform: scale(0.98); }' >> public/install_links.html
-          echo '    .no-apps { text-align: center; padding: 60px 20px; color: #666; background: white; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }' >> public/install_links.html
-          echo '    .no-apps-icon { font-size: 48px; margin-bottom: 16px; }' >> public/install_links.html
-          echo '    .loading { text-align: center; padding: 40px; color: #666; }' >> public/install_links.html
-          echo '    .loading-spinner { display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #007aff; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px; }' >> public/install_links.html
-          echo '    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }' >> public/install_links.html
-          echo '    .footer { text-align: center; margin-top: 40px; color: #999; font-size: 14px; }' >> public/install_links.html
-          echo '    @media (max-width: 600px) { .app-card { flex-direction: column; align-items: stretch; padding: 16px; } .app-info { margin-right: 0; margin-bottom: 12px; } .install-btn { text-align: center; padding: 12px; } body { padding: 12px; } .header { padding: 16px; } h1 { font-size: 24px; } }' >> public/install_links.html
-          echo '  </style>' >> public/install_links.html
-          echo '</head>' >> public/install_links.html
-          echo '<body>' >> public/install_links.html
-          echo '  <div class="header">' >> public/install_links.html
-          echo '    <h1>📱 OTA Installer</h1>' >> public/install_links.html
-          echo '    <div class="subtitle">Install iOS apps directly from your browser</div>' >> public/install_links.html
-          echo '  </div>' >> public/install_links.html
-          echo '  <div id="apps-container">' >> public/install_links.html
-          echo '    <div class="loading">' >> public/install_links.html
-          echo '      <div class="loading-spinner"></div>' >> public/install_links.html
-          echo '      <div>Loading apps...</div>' >> public/install_links.html
-          echo '    </div>' >> public/install_links.html
-          echo '  </div>' >> public/install_links.html
-          echo '  <div class="footer">' >> public/install_links.html
-          echo '    <p>Made with ❤️ • OTA Installer</p>' >> public/install_links.html
-          echo '  </div>' >> public/install_links.html
-          echo '  <script>' >> public/install_links.html
-          echo '    fetch("apps.json")' >> public/install_links.html
-          echo '      .then(res => {' >> public/install_links.html
-          echo '        if (!res.ok) throw new Error("Failed to load apps");' >> public/install_links.html
-          echo '        return res.json();' >> public/install_links.html
-          echo '      })' >> public/install_links.html
-          echo '      .then(data => {' >> public/install_links.html
-          echo '        const container = document.getElementById("apps-container");' >> public/install_links.html
-          echo '        if (!data.apps || data.apps.length === 0) {' >> public/install_links.html
-          echo '          container.innerHTML = `<div class="no-apps"><div class="no-apps-icon">📦</div><h3>No apps available</h3><p>Upload IPA files to the apps folder to get started.</p></div>`;' >> public/install_links.html
-          echo '          return;' >> public/install_links.html
-          echo '        }' >> public/install_links.html
-          echo '        let html = "";' >> public/install_links.html
-          echo '        data.apps.forEach(app => {' >> public/install_links.html
-          echo '          const repoName = window.location.pathname.split("/")[1] || "";' >> public/install_links.html
-          echo '          const manifestUrl = `https://${window.location.hostname}/${repoName}/manifests/${encodeURIComponent(app.name)}.plist`;' >> public/install_links.html
-          echo '          const installUrl = `itms-services://?action=download-manifest&url=${encodeURIComponent(manifestUrl)}`;' >> public/install_links.html
-          echo '          html += `<div class="app-card"><div class="app-info"><div class="app-name">${app.name}</div><div class="app-details">${app.bundle_id}</div><div class="app-version">Version ${app.version}</div></div><a href="${installUrl}" class="install-btn">📲 Install</a></div>`;' >> public/install_links.html
-          echo '        });' >> public/install_links.html
-          echo '        container.innerHTML = html;' >> public/install_links.html
-          echo '      })' >> public/install_links.html
-          echo '      .catch(err => {' >> public/install_links.html
-          echo '        console.error("Error loading apps:", err);' >> public/install_links.html
-          echo '        document.getElementById("apps-container").innerHTML = `<div class="no-apps"><div class="no-apps-icon">⚠️</div><h3>Error loading apps</h3><p>Please try again later or contact support.</p></div>`;' >> public/install_links.html
-          echo '      });' >> public/install_links.html
-          echo '  </script>' >> public/install_links.html
-          echo '</body>' >> public/install_links.html
-          echo '</html>' >> public/install_links.html
-
-      - name: Generate main index.html
-        run: |
-          echo '<!DOCTYPE html>' > public/index.html
-          echo '<html>' >> public/index.html
-          echo '<head>' >> public/index.html
-          echo '  <meta charset="UTF-8">' >> public/index.html
-          echo '  <meta http-equiv="refresh" content="0; url=install_links.html">' >> public/index.html
-          echo '  <title>OTA Installer</title>' >> public/index.html
-          echo '</head>' >> public/index.html
-          echo '<body>' >> public/index.html
-          echo '  <p>Redirecting to <a href="install_links.html">Install Links</a>...</p>' >> public/index.html
-          echo '</body>' >> public/index.html
-          echo '</html>' >> public/index.html
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: public
-
-      - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4
-
-      - name: Commit and push generated files
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Add files if they exist
-          if [ -d "public" ] && [ "$(ls -A public 2>/dev/null)" ]; then
-            git add public/ || true
-          fi
-          if [ -d "manifests" ] && [ "$(ls -A manifests 2>/dev/null)" ]; then
-            git add manifests/ || true
-          fi
-          if [ -f "public/apps.json" ]; then
-            git add public/apps.json || true
-          fi
-
-          # Commit if there are changes
-          if ! git diff --staged --quiet; then
-            git commit -m "Update OTA builds [skip ci]"
-            git push
-          else
-            echo "No changes to commit"
-          fi
+          echo '    .no-apps { text-align: center; padding: 60px 20px; color: #666; background: white; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,
