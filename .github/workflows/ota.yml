@@ -81,15 +81,6 @@ EOF
               name="${filename%.*}"
               bundle_id=$(echo "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
               
-              # Get file size and generate MD5
-              if [ -f "$ipa" ]; then
-                size=$(stat -c%s "$ipa" 2>/dev/null || echo "0")
-                md5=$(md5sum "$ipa" 2>/dev/null | cut -d' ' -f1 || echo "")
-              else
-                size="0"
-                md5=""
-              fi
-              
               # Generate manifest.plist
               cat > "manifests/${name}.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -132,240 +123,92 @@ EOF
 
       - name: Generate install_links.html
         run: |
-          cat > public/install_links.html <<-\EOF
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>OTA Installer - Install Apps</title>
-            <style>
-              * { margin: 0; padding: 0; box-sizing: border-box; }
-              body { 
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; 
-                max-width: 800px; 
-                margin: 0 auto; 
-                padding: 20px; 
-                background: #f5f5f5;
-                min-height: 100vh;
-              }
-              .header { 
-                background: white; 
-                padding: 24px; 
-                border-radius: 16px; 
-                margin-bottom: 24px; 
-                box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-                text-align: center;
-              }
-              h1 { 
-                margin: 0; 
-                color: #1a1a1a;
-                font-size: 28px;
-                font-weight: 700;
-              }
-              .subtitle { 
-                color: #666; 
-                margin-top: 8px;
-                font-size: 16px;
-              }
-              .app-card { 
-                background: white; 
-                border-radius: 16px; 
-                padding: 20px 24px; 
-                margin-bottom: 16px; 
-                box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-                display: flex; 
-                align-items: center; 
-                justify-content: space-between;
-                transition: transform 0.2s, box-shadow 0.2s;
-              }
-              .app-card:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-              }
-              .app-info { 
-                flex: 1;
-                margin-right: 16px;
-              }
-              .app-name { 
-                font-size: 18px; 
-                font-weight: 600;
-                color: #1a1a1a;
-              }
-              .app-details { 
-                color: #666; 
-                font-size: 14px;
-                margin-top: 4px;
-              }
-              .app-version {
-                color: #999;
-                font-size: 12px;
-                margin-top: 2px;
-              }
-              .install-btn { 
-                background: #007aff; 
-                color: white; 
-                border: none; 
-                padding: 10px 28px; 
-                border-radius: 20px; 
-                font-size: 16px; 
-                font-weight: 500;
-                cursor: pointer; 
-                text-decoration: none; 
-                display: inline-block;
-                transition: background 0.2s, transform 0.2s;
-                white-space: nowrap;
-              }
-              .install-btn:hover { 
-                background: #0056b3;
-                transform: scale(1.02);
-              }
-              .install-btn:active {
-                transform: scale(0.98);
-              }
-              .no-apps { 
-                text-align: center; 
-                padding: 60px 20px; 
-                color: #666;
-                background: white;
-                border-radius: 16px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-              }
-              .no-apps-icon {
-                font-size: 48px;
-                margin-bottom: 16px;
-              }
-              .loading {
-                text-align: center;
-                padding: 40px;
-                color: #666;
-              }
-              .loading-spinner {
-                display: inline-block;
-                width: 40px;
-                height: 40px;
-                border: 4px solid #f3f3f3;
-                border-top: 4px solid #007aff;
-                border-radius: 50%;
-                animation: spin 1s linear infinite;
-                margin-bottom: 16px;
-              }
-              @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-              }
-              .footer {
-                text-align: center;
-                margin-top: 40px;
-                color: #999;
-                font-size: 14px;
-              }
-              @media (max-width: 600px) {
-                .app-card {
-                  flex-direction: column;
-                  align-items: stretch;
-                  padding: 16px;
-                }
-                .app-info {
-                  margin-right: 0;
-                  margin-bottom: 12px;
-                }
-                .install-btn {
-                  text-align: center;
-                  padding: 12px;
-                }
-                body {
-                  padding: 12px;
-                }
-                .header {
-                  padding: 16px;
-                }
-                h1 {
-                  font-size: 24px;
-                }
-              }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <h1>📱 OTA Installer</h1>
-              <div class="subtitle">Install iOS apps directly from your browser</div>
-            </div>
-            <div id="apps-container">
-              <div class="loading">
-                <div class="loading-spinner"></div>
-                <div>Loading apps...</div>
-              </div>
-            </div>
-            <div class="footer">
-              <p>Made with ❤️ • OTA Installer</p>
-            </div>
-            <script>
-              fetch('apps.json')
-                .then(res => {
-                  if (!res.ok) throw new Error('Failed to load apps');
-                  return res.json();
-                })
-                .then(data => {
-                  const container = document.getElementById('apps-container');
-                  if (!data.apps || data.apps.length === 0) {
-                    container.innerHTML = `
-                      <div class="no-apps">
-                        <div class="no-apps-icon">📦</div>
-                        <h3>No apps available</h3>
-                        <p>Upload IPA files to the apps folder to get started.</p>
-                      </div>
-                    `;
-                    return;
-                  }
-                  let html = '';
-                  data.apps.forEach(app => {
-                    const repoName = window.location.pathname.split('/')[1] || '';
-                    const manifestUrl = `https://${window.location.hostname}/${repoName}/manifests/${encodeURIComponent(app.name)}.plist`;
-                    const installUrl = `itms-services://?action=download-manifest&url=${encodeURIComponent(manifestUrl)}`;
-                    html += `
-                      <div class="app-card">
-                        <div class="app-info">
-                          <div class="app-name">${app.name}</div>
-                          <div class="app-details">${app.bundle_id}</div>
-                          <div class="app-version">Version ${app.version}</div>
-                        </div>
-                        <a href="${installUrl}" class="install-btn">📲 Install</a>
-                      </div>
-                    `;
-                  });
-                  container.innerHTML = html;
-                })
-                .catch(err => {
-                  console.error('Error loading apps:', err);
-                  document.getElementById('apps-container').innerHTML = `
-                    <div class="no-apps">
-                      <div class="no-apps-icon">⚠️</div>
-                      <h3>Error loading apps</h3>
-                      <p>Please try again later or contact support.</p>
-                    </div>
-                  `;
-                });
-            </script>
-          </body>
-          </html>
-          EOF
+          echo '<!DOCTYPE html>' > public/install_links.html
+          echo '<html>' >> public/install_links.html
+          echo '<head>' >> public/install_links.html
+          echo '  <meta charset="UTF-8">' >> public/install_links.html
+          echo '  <meta name="viewport" content="width=device-width, initial-scale=1.0">' >> public/install_links.html
+          echo '  <title>OTA Installer - Install Apps</title>' >> public/install_links.html
+          echo '  <style>' >> public/install_links.html
+          echo '    * { margin: 0; padding: 0; box-sizing: border-box; }' >> public/install_links.html
+          echo '    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; min-height: 100vh; }' >> public/install_links.html
+          echo '    .header { background: white; padding: 24px; border-radius: 16px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); text-align: center; }' >> public/install_links.html
+          echo '    h1 { margin: 0; color: #1a1a1a; font-size: 28px; font-weight: 700; }' >> public/install_links.html
+          echo '    .subtitle { color: #666; margin-top: 8px; font-size: 16px; }' >> public/install_links.html
+          echo '    .app-card { background: white; border-radius: 16px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: space-between; transition: transform 0.2s, box-shadow 0.2s; }' >> public/install_links.html
+          echo '    .app-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }' >> public/install_links.html
+          echo '    .app-info { flex: 1; margin-right: 16px; }' >> public/install_links.html
+          echo '    .app-name { font-size: 18px; font-weight: 600; color: #1a1a1a; }' >> public/install_links.html
+          echo '    .app-details { color: #666; font-size: 14px; margin-top: 4px; }' >> public/install_links.html
+          echo '    .app-version { color: #999; font-size: 12px; margin-top: 2px; }' >> public/install_links.html
+          echo '    .install-btn { background: #007aff; color: white; border: none; padding: 10px 28px; border-radius: 20px; font-size: 16px; font-weight: 500; cursor: pointer; text-decoration: none; display: inline-block; transition: background 0.2s, transform 0.2s; white-space: nowrap; }' >> public/install_links.html
+          echo '    .install-btn:hover { background: #0056b3; transform: scale(1.02); }' >> public/install_links.html
+          echo '    .install-btn:active { transform: scale(0.98); }' >> public/install_links.html
+          echo '    .no-apps { text-align: center; padding: 60px 20px; color: #666; background: white; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }' >> public/install_links.html
+          echo '    .no-apps-icon { font-size: 48px; margin-bottom: 16px; }' >> public/install_links.html
+          echo '    .loading { text-align: center; padding: 40px; color: #666; }' >> public/install_links.html
+          echo '    .loading-spinner { display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #007aff; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px; }' >> public/install_links.html
+          echo '    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }' >> public/install_links.html
+          echo '    .footer { text-align: center; margin-top: 40px; color: #999; font-size: 14px; }' >> public/install_links.html
+          echo '    @media (max-width: 600px) { .app-card { flex-direction: column; align-items: stretch; padding: 16px; } .app-info { margin-right: 0; margin-bottom: 12px; } .install-btn { text-align: center; padding: 12px; } body { padding: 12px; } .header { padding: 16px; } h1 { font-size: 24px; } }' >> public/install_links.html
+          echo '  </style>' >> public/install_links.html
+          echo '</head>' >> public/install_links.html
+          echo '<body>' >> public/install_links.html
+          echo '  <div class="header">' >> public/install_links.html
+          echo '    <h1>📱 OTA Installer</h1>' >> public/install_links.html
+          echo '    <div class="subtitle">Install iOS apps directly from your browser</div>' >> public/install_links.html
+          echo '  </div>' >> public/install_links.html
+          echo '  <div id="apps-container">' >> public/install_links.html
+          echo '    <div class="loading">' >> public/install_links.html
+          echo '      <div class="loading-spinner"></div>' >> public/install_links.html
+          echo '      <div>Loading apps...</div>' >> public/install_links.html
+          echo '    </div>' >> public/install_links.html
+          echo '  </div>' >> public/install_links.html
+          echo '  <div class="footer">' >> public/install_links.html
+          echo '    <p>Made with ❤️ • OTA Installer</p>' >> public/install_links.html
+          echo '  </div>' >> public/install_links.html
+          echo '  <script>' >> public/install_links.html
+          echo '    fetch("apps.json")' >> public/install_links.html
+          echo '      .then(res => {' >> public/install_links.html
+          echo '        if (!res.ok) throw new Error("Failed to load apps");' >> public/install_links.html
+          echo '        return res.json();' >> public/install_links.html
+          echo '      })' >> public/install_links.html
+          echo '      .then(data => {' >> public/install_links.html
+          echo '        const container = document.getElementById("apps-container");' >> public/install_links.html
+          echo '        if (!data.apps || data.apps.length === 0) {' >> public/install_links.html
+          echo '          container.innerHTML = `<div class="no-apps"><div class="no-apps-icon">📦</div><h3>No apps available</h3><p>Upload IPA files to the apps folder to get started.</p></div>`;' >> public/install_links.html
+          echo '          return;' >> public/install_links.html
+          echo '        }' >> public/install_links.html
+          echo '        let html = "";' >> public/install_links.html
+          echo '        data.apps.forEach(app => {' >> public/install_links.html
+          echo '          const repoName = window.location.pathname.split("/")[1] || "";' >> public/install_links.html
+          echo '          const manifestUrl = `https://${window.location.hostname}/${repoName}/manifests/${encodeURIComponent(app.name)}.plist`;' >> public/install_links.html
+          echo '          const installUrl = `itms-services://?action=download-manifest&url=${encodeURIComponent(manifestUrl)}`;' >> public/install_links.html
+          echo '          html += `<div class="app-card"><div class="app-info"><div class="app-name">${app.name}</div><div class="app-details">${app.bundle_id}</div><div class="app-version">Version ${app.version}</div></div><a href="${installUrl}" class="install-btn">📲 Install</a></div>`;' >> public/install_links.html
+          echo '        });' >> public/install_links.html
+          echo '        container.innerHTML = html;' >> public/install_links.html
+          echo '      })' >> public/install_links.html
+          echo '      .catch(err => {' >> public/install_links.html
+          echo '        console.error("Error loading apps:", err);' >> public/install_links.html
+          echo '        document.getElementById("apps-container").innerHTML = `<div class="no-apps"><div class="no-apps-icon">⚠️</div><h3>Error loading apps</h3><p>Please try again later or contact support.</p></div>`;' >> public/install_links.html
+          echo '      });' >> public/install_links.html
+          echo '  </script>' >> public/install_links.html
+          echo '</body>' >> public/install_links.html
+          echo '</html>' >> public/install_links.html
 
       - name: Generate main index.html
         run: |
-          cat > public/index.html <<-\EOF
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="UTF-8">
-            <meta http-equiv="refresh" content="0; url=install_links.html">
-            <title>OTA Installer</title>
-          </head>
-          <body>
-            <p>Redirecting to <a href="install_links.html">Install Links</a>...</p>
-          </body>
-          </html>
-          EOF
+          echo '<!DOCTYPE html>' > public/index.html
+          echo '<html>' >> public/index.html
+          echo '<head>' >> public/index.html
+          echo '  <meta charset="UTF-8">' >> public/index.html
+          echo '  <meta http-equiv="refresh" content="0; url=install_links.html">' >> public/index.html
+          echo '  <title>OTA Installer</title>' >> public/index.html
+          echo '</head>' >> public/index.html
+          echo '<body>' >> public/index.html
+          echo '  <p>Redirecting to <a href="install_links.html">Install Links</a>...</p>' >> public/index.html
+          echo '</body>' >> public/index.html
+          echo '</html>' >> public/index.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
