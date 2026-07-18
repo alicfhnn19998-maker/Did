@@ -337,6 +337,18 @@ jobs:
                   .shadow(color: .black.opacity(0.35), radius: 18, x: 0, y: 10)
               }
           }
+
+          // MARK: - Previews for PhoneFrameView
+          #Preview("Code Canvas") {
+              CodeCanvas(project: CodeProject(name: "Sample", language: "Swift", code: "print(\"Hello\")"))
+          }
+          #Preview("Phone Frame") {
+              PhoneFrameView {
+                  Text("Hello")
+                      .frame(width: 200, height: 400)
+                      .background(Color.blue)
+              }
+          }
           PXEOF
           echo "PhoneFrameView.swift: $(wc -l < PhoneFrameView.swift) lines"
 
@@ -391,6 +403,16 @@ jobs:
                   }
                   .environment(\.layoutDirection, loc.language.layoutDirection)
               }
+          }
+
+          // MARK: - Previews
+          #Preview("Add Project (Arabic)") {
+              AddProjectView(store: ProjectsStore())
+                  .environmentObject(LocalizationManager.shared)
+          }
+          #Preview("Add Project (English)") {
+              AddProjectView(store: ProjectsStore())
+                  .environmentObject(LocalizationManager.shared)
           }
           PXEOF
           echo "AddProjectView.swift: $(wc -l < AddProjectView.swift) lines"
@@ -461,6 +483,28 @@ jobs:
                   .font(.subheadline)
               }
           }
+
+          // MARK: - Previews
+          #Preview("Swift Project") {
+              NavigationStack {
+                  ProjectDetailView(project: CodeProject(
+                      name: "HelloSwift",
+                      language: "Swift",
+                      code: "func sayHello() {\n    print(\"Hello, World!\")\n}"
+                  ))
+              }
+              .environmentObject(LocalizationManager.shared)
+          }
+          #Preview("HTML Project") {
+              NavigationStack {
+                  ProjectDetailView(project: CodeProject(
+                      name: "MyPage",
+                      language: "HTML",
+                      code: "<h1>Hello</h1><p>This is a preview.</p>"
+                  ))
+              }
+              .environmentObject(LocalizationManager.shared)
+          }
           PXEOF
           echo "ProjectDetailView.swift: $(wc -l < ProjectDetailView.swift) lines"
 
@@ -518,6 +562,21 @@ jobs:
                   .environment(\.layoutDirection, loc.language.layoutDirection)
               }
           }
+
+          // MARK: - Previews
+          #Preview("Empty List") {
+              ProjectsListView(store: ProjectsStore())
+                  .environmentObject(LocalizationManager.shared)
+          }
+          #Preview("With Projects") {
+              let store = ProjectsStore()
+              store.projects = [
+                  CodeProject(name: "MyApp", language: "Swift", code: "print(\"Hello\")"),
+                  CodeProject(name: "Website", language: "HTML", code: "<h1>Hi</h1>")
+              ]
+              return ProjectsListView(store: store)
+                  .environmentObject(LocalizationManager.shared)
+          }
           PXEOF
           echo "ProjectsListView.swift: $(wc -l < ProjectsListView.swift) lines"
 
@@ -551,6 +610,12 @@ jobs:
                   .environment(\.layoutDirection, loc.language.layoutDirection)
               }
           }
+
+          // MARK: - Preview
+          #Preview("Settings") {
+              SettingsView()
+                  .environmentObject(LocalizationManager.shared)
+          }
           PXEOF
           echo "SettingsView.swift: $(wc -l < SettingsView.swift) lines"
 
@@ -573,6 +638,12 @@ jobs:
                   .environment(\.layoutDirection, loc.language.layoutDirection)
                   .preferredColorScheme(.dark)
               }
+          }
+
+          // MARK: - Preview
+          #Preview("Main App") {
+              ContentView()
+                  .environmentObject(LocalizationManager.shared)
           }
           PXEOF
           echo "ContentView.swift: $(wc -l < ContentView.swift) lines"
