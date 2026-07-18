@@ -1,4 +1,4 @@
-name: Build_PreviewX_SwiftUI
+name: Build_PreviewX_Swift
 
 on:
   push:
@@ -37,12 +37,12 @@ jobs:
               draw.rounded_rectangle([size*.16,size*.22,size*.84,size*.86],
                   radius=size*.14, outline=(255,255,255), width=max(2,size//30))
               try:
-                  font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Menlo.ttc", int(size*.24))
+                  font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Menlo.ttc", int(size*.22))
               except Exception:
                   font = ImageFont.load_default()
-              bbox = draw.textbbox((0,0),"</>",font=font)
+              bbox = draw.textbbox((0,0),"Sw",font=font)
               tw,th = bbox[2]-bbox[0], bbox[3]-bbox[1]
-              draw.text(((size-tw)/2-bbox[0],(size-th)/2-bbox[1]),"</>",fill=(255,255,255),font=font)
+              draw.text(((size-tw)/2-bbox[0],(size-th)/2-bbox[1]),"Sw",fill=(255,255,255),font=font)
               img.save(path)
           make_icon(120,  "Resources/AppIcon60x60@2x.png")
           make_icon(152,  "Resources/AppIcon76x76@2x~ipad.png")
@@ -59,11 +59,11 @@ jobs:
           <plist version="1.0">
           <dict>
               <key>CFBundleExecutable</key>          <string>PreviewX</string>
-              <key>CFBundleIdentifier</key>          <string>com.previewx.app</string>
+              <key>CFBundleIdentifier</key>          <string>com.previewx.swift</string>
               <key>CFBundleName</key>                <string>PreviewX</string>
               <key>CFBundleDisplayName</key>         <string>PreviewX</string>
               <key>CFBundlePackageType</key>         <string>APPL</string>
-              <key>CFBundleShortVersionString</key>  <string>1.0</string>
+              <key>CFBundleShortVersionString</key>  <string>2.0</string>
               <key>CFBundleVersion</key>             <string>1</string>
               <key>LSRequiresIPhoneOS</key>          <true/>
               <key>MinimumOSVersion</key>            <string>16.0</string>
@@ -87,7 +87,6 @@ jobs:
           import SwiftUI
           import Foundation
 
-          // MARK: - App Language
           enum AppLanguage: String, CaseIterable, Identifiable {
               case ar, en
               var id: String { rawValue }
@@ -95,7 +94,6 @@ jobs:
               var layoutDirection: LayoutDirection { self == .ar ? .rightToLeft : .leftToRight }
           }
 
-          // MARK: - Localization Manager
           final class LocalizationManager: ObservableObject {
               static let shared = LocalizationManager()
               @Published var language: AppLanguage = .ar
@@ -104,29 +102,29 @@ jobs:
                   "app_title":        [.ar: "بريفيو إكس", .en: "PreviewX"],
                   "tab_projects":     [.ar: "المشاريع", .en: "Projects"],
                   "tab_settings":     [.ar: "الإعدادات", .en: "Settings"],
-                  "no_projects":      [.ar: "لا توجد مشاريع بعد. اضغط + لإضافة مشروع جديد", .en: "No projects yet. Tap + to add one"],
-                  "add_project":      [.ar: "مشروع جديد", .en: "New Project"],
+                  "no_projects":      [.ar: "لا توجد مشاريع بعد. اضغط + لإضافة مشروع Swift جديد", .en: "No projects yet. Tap + to add a new Swift project"],
+                  "add_project":      [.ar: "مشروع Swift جديد", .en: "New Swift Project"],
                   "project_name":     [.ar: "اسم المشروع", .en: "Project Name"],
-                  "select_language":  [.ar: "لغة البرمجة", .en: "Programming Language"],
                   "code_content":     [.ar: "الكود", .en: "Code"],
-                  "code_placeholder": [.ar: "اكتب أو الصق الكود هنا...", .en: "Write or paste code here..."],
+                  "code_placeholder": [.ar: "اكتب كود Swift هنا...", .en: "Write Swift code here..."],
                   "save":             [.ar: "حفظ", .en: "Save"],
                   "cancel":           [.ar: "إلغاء", .en: "Cancel"],
-                  "delete":           [.ar: "حذف", .en: "Delete"],
-                  "preview":          [.ar: "المعاينة", .en: "Preview"],
+                  "build":            [.ar: "بناء (Build)", .en: "Build"],
+                  "build_results":    [.ar: "نتائج البناء", .en: "Build Results"],
+                  "build_succeeded":  [.ar: "تم البناء بنجاح — لا أخطاء", .en: "Build Succeeded — No Issues"],
+                  "errors_count":     [.ar: "أخطاء", .en: "Errors"],
+                  "warnings_count":   [.ar: "تحذيرات", .en: "Warnings"],
+                  "apply_fix":        [.ar: "تطبيق الإصلاح", .en: "Apply Fix"],
+                  "line_label":       [.ar: "سطر", .en: "Line"],
                   "inspector":        [.ar: "مفتش الملف", .en: "File Inspector"],
                   "lines":            [.ar: "عدد الأسطر", .en: "Lines"],
                   "characters":       [.ar: "عدد الأحرف", .en: "Characters"],
                   "functions":        [.ar: "عدد الدوال", .en: "Functions"],
                   "created":          [.ar: "تاريخ الإنشاء", .en: "Created"],
-                  "language_field":   [.ar: "اللغة", .en: "Language"],
-                  "live_preview":     [.ar: "معاينة حية", .en: "Live Preview"],
-                  "static_canvas":    [.ar: "لا تتوفر معاينة تنفيذية لهذه اللغة على الجهاز — المعروض هو محرر كود مع تفاصيل الملف، وليس تنفيذاً فعلياً للكود",
-                                       .en: "This language can't be executed on-device — shown below is a code canvas with file details, not a real execution"],
                   "app_language":     [.ar: "لغة التطبيق", .en: "App Language"],
                   "about":            [.ar: "عن التطبيق", .en: "About"],
-                  "about_text":       [.ar: "بريفيو إكس يعرض مشاريعك البرمجية داخل إطار جوال بأسلوب أقرب لمعاينة Xcode، مع تمييز صياغة الكود ودعم عدة لغات برمجة وواجهة ثنائية اللغة",
-                                       .en: "PreviewX shows your code projects inside a phone frame styled like Xcode's canvas, with syntax highlighting across many languages and a bilingual interface"],
+                  "about_text":       [.ar: "بريفيو إكس محرر Swift متقدم: يلوّن الكود عبر محلل رمزي حقيقي (Tokenizer)، ويفحص الأخطاء بخوارزميات تحليل ساكن حقيقية (تطابق الأقواس، فحص النصوص، اقتراح تصحيح بخوارزمية Levenshtein) — كل هذا محلياً على جهازك بدون أي سيرفر خارجي. ملاحظة: هذا تحليل ساكن للكود وليس تنفيذاً فعلياً له، لأن iOS لا يسمح بتشغيل كومبايلر داخل تطبيقات الطرف الثالث",
+                                       .en: "PreviewX is an advanced Swift editor: colors code via a real tokenizer, and checks for issues with real static-analysis algorithms (bracket matching, string validation, Levenshtein-based typo suggestions) — all fully on-device, no external server. Note: this is static analysis, not real execution, since iOS blocks running a compiler inside third-party apps"],
               ]
 
               func t(_ key: String) -> String {
@@ -142,23 +140,20 @@ jobs:
           import SwiftUI
           import Foundation
 
-          // MARK: - Code Project Model
           struct CodeProject: Identifiable, Codable, Equatable {
               var id: UUID = UUID()
               var name: String
-              var language: String
               var code: String
               var createdAt: Date = Date()
           }
 
-          // MARK: - Projects Store (local persistence)
           final class ProjectsStore: ObservableObject {
               @Published var projects: [CodeProject] = []
               private let fileURL: URL
 
               init() {
                   let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                  fileURL = dir.appendingPathComponent("previewx_projects.json")
+                  fileURL = dir.appendingPathComponent("previewx_swift_projects.json")
                   load()
               }
 
@@ -178,6 +173,12 @@ jobs:
                   save()
               }
 
+              func update(_ project: CodeProject) {
+                  guard let idx = projects.firstIndex(where: { $0.id == project.id }) else { return }
+                  projects[idx] = project
+                  save()
+              }
+
               func delete(at offsets: IndexSet) {
                   projects.remove(atOffsets: offsets)
                   save()
@@ -186,121 +187,340 @@ jobs:
           PXEOF
           echo "Models.swift: $(wc -l < Models.swift) lines"
 
-      - name: Generate Source - SyntaxHighlighter.swift
+      - name: Generate Source - SwiftLexer.swift
         run: |
-          cat > SyntaxHighlighter.swift << 'PXEOF'
-          import SwiftUI
+          cat > SwiftLexer.swift << 'PXEOF'
           import Foundation
 
-          // MARK: - Language Definition
-          struct LangDef: Identifiable {
-              var id: String { name }
-              let name: String
-              let keywords: [String]
-              let isWeb: Bool
+          enum TokenKind {
+              case keyword, type, identifier, string, number, comment, attribute, punctuation
           }
 
-          let supportedLanguages: [LangDef] = [
-              LangDef(name: "Swift", keywords: ["func","var","let","if","else","for","while","struct","class","enum","protocol","import","return","guard","switch","case","default","private","public","extension","init","self","true","false","nil"], isWeb: false),
-              LangDef(name: "Python", keywords: ["def","class","if","elif","else","for","while","import","from","return","try","except","with","as","lambda","True","False","None","self","print"], isWeb: false),
-              LangDef(name: "JavaScript", keywords: ["function","var","let","const","if","else","for","while","return","class","import","export","true","false","null","undefined","this","new","try","catch"], isWeb: false),
-              LangDef(name: "TypeScript", keywords: ["function","let","const","interface","type","if","else","for","while","return","class","import","export","true","false","null","undefined","this","new","implements"], isWeb: false),
-              LangDef(name: "HTML", keywords: ["html","head","body","div","span","script","style","link","meta","title","href","src","class","id"], isWeb: true),
-              LangDef(name: "CSS", keywords: ["color","background","margin","padding","display","flex","grid","width","height","border","position"], isWeb: false),
-              LangDef(name: "Java", keywords: ["public","private","class","void","static","if","else","for","while","return","import","new","this","extends","implements","true","false","null"], isWeb: false),
-              LangDef(name: "Kotlin", keywords: ["fun","val","var","if","else","for","while","class","return","import","when","true","false","null","this","object"], isWeb: false),
-              LangDef(name: "C", keywords: ["int","char","float","double","void","if","else","for","while","return","struct","include","define","static"], isWeb: false),
-              LangDef(name: "C++", keywords: ["int","class","void","if","else","for","while","return","include","namespace","using","new","delete","public","private","template"], isWeb: false),
-              LangDef(name: "C#", keywords: ["public","private","class","void","static","if","else","for","while","return","using","namespace","new","this","true","false","null"], isWeb: false),
-              LangDef(name: "PHP", keywords: ["function","echo","if","else","for","while","return","class","public","private","new","true","false","null","array"], isWeb: false),
-              LangDef(name: "Ruby", keywords: ["def","end","if","elsif","else","class","module","return","true","false","nil","puts","require"], isWeb: false),
-              LangDef(name: "Go", keywords: ["func","var","const","if","else","for","return","package","import","struct","interface","true","false","nil"], isWeb: false),
-              LangDef(name: "Rust", keywords: ["fn","let","mut","if","else","for","while","return","struct","enum","impl","use","true","false","match"], isWeb: false),
-              LangDef(name: "Dart", keywords: ["void","var","final","if","else","for","while","return","class","import","true","false","null","this"], isWeb: false),
-          ]
-
-          func langDef(for name: String) -> LangDef {
-              supportedLanguages.first(where: { $0.name == name }) ?? supportedLanguages[0]
+          struct Token {
+              let kind: TokenKind
+              let text: String
+              let line: Int
+              let range: Range<String.Index>
           }
 
-          // MARK: - Basic Multi-Language Highlighter
-          enum SyntaxHighlighter {
-              static func highlight(_ code: String, language: String) -> AttributedString {
+          // MARK: - Real single-pass Swift tokenizer (O(n))
+          enum SwiftLexer {
+              static let keywords: Set<String> = [
+                  "func","var","let","if","else","for","while","struct","class","enum","protocol",
+                  "import","return","guard","switch","case","default","private","public","internal",
+                  "fileprivate","extension","init","self","true","false","nil","break","continue",
+                  "in","is","as","try","catch","throw","throws","rethrows","do","repeat","where",
+                  "typealias","associatedtype","static","final","override","mutating","lazy","weak",
+                  "unowned","inout","some","any","async","await","actor","willSet","didSet","get","set"
+              ]
+
+              static let types: Set<String> = [
+                  "String","Int","Double","Float","Bool","Array","Dictionary","Set","Optional","Void",
+                  "Any","AnyObject","Character","UInt","Int8","Int16","Int32","Int64","CGFloat","Data",
+                  "URL","Date","View","Text","VStack","HStack","ZStack","Image","Button"
+              ]
+
+              static func tokenize(_ code: String) -> [Token] {
+                  var tokens: [Token] = []
+                  var i = code.startIndex
+                  let end = code.endIndex
+                  var line = 1
+
+                  while i < end {
+                      let c = code[i]
+
+                      if c == "\n" { line += 1; i = code.index(after: i); continue }
+                      if c.isWhitespace { i = code.index(after: i); continue }
+
+                      // line comment
+                      if c == "/", code.index(after: i) < end, code[code.index(after: i)] == "/" {
+                          let start = i
+                          while i < end && code[i] != "\n" { i = code.index(after: i) }
+                          tokens.append(Token(kind: .comment, text: String(code[start..<i]), line: line, range: start..<i))
+                          continue
+                      }
+
+                      // block comment
+                      if c == "/", code.index(after: i) < end, code[code.index(after: i)] == "*" {
+                          let start = i
+                          i = code.index(i, offsetBy: 2, limitedBy: end) ?? end
+                          while i < end {
+                              if code[i] == "*", code.index(after: i) < end, code[code.index(after: i)] == "/" {
+                                  i = code.index(i, offsetBy: 2, limitedBy: end) ?? end
+                                  break
+                              }
+                              if code[i] == "\n" { line += 1 }
+                              i = code.index(after: i)
+                          }
+                          tokens.append(Token(kind: .comment, text: String(code[start..<i]), line: line, range: start..<i))
+                          continue
+                      }
+
+                      // string literal
+                      if c == "\"" {
+                          let start = i
+                          i = code.index(after: i)
+                          while i < end && code[i] != "\"" {
+                              if code[i] == "\\" {
+                                  i = code.index(i, offsetBy: 1, limitedBy: end) ?? end
+                                  if i >= end { break }
+                              }
+                              if i < end && code[i] == "\n" { line += 1 }
+                              i = code.index(after: i)
+                          }
+                          if i < end { i = code.index(after: i) }
+                          tokens.append(Token(kind: .string, text: String(code[start..<i]), line: line, range: start..<i))
+                          continue
+                      }
+
+                      // number
+                      if c.isNumber {
+                          let start = i
+                          while i < end && (code[i].isNumber || code[i] == ".") { i = code.index(after: i) }
+                          tokens.append(Token(kind: .number, text: String(code[start..<i]), line: line, range: start..<i))
+                          continue
+                      }
+
+                      // identifier / keyword / type
+                      if c.isLetter || c == "_" {
+                          let start = i
+                          while i < end && (code[i].isLetter || code[i].isNumber || code[i] == "_") { i = code.index(after: i) }
+                          let word = String(code[start..<i])
+                          let kind: TokenKind = keywords.contains(word) ? .keyword : (types.contains(word) ? .type : .identifier)
+                          tokens.append(Token(kind: kind, text: word, line: line, range: start..<i))
+                          continue
+                      }
+
+                      // attribute e.g. @State @Published
+                      if c == "@" {
+                          let start = i
+                          i = code.index(after: i)
+                          while i < end && code[i].isLetter { i = code.index(after: i) }
+                          tokens.append(Token(kind: .attribute, text: String(code[start..<i]), line: line, range: start..<i))
+                          continue
+                      }
+
+                      // punctuation / operators (single char fallback)
+                      let start = i
+                      i = code.index(after: i)
+                      tokens.append(Token(kind: .punctuation, text: String(code[start..<i]), line: line, range: start..<i))
+                  }
+                  return tokens
+              }
+          }
+          PXEOF
+          echo "SwiftLexer.swift: $(wc -l < SwiftLexer.swift) lines"
+
+      - name: Generate Source - SwiftHighlighter.swift
+        run: |
+          cat > SwiftHighlighter.swift << 'PXEOF'
+          import SwiftUI
+
+          // MARK: - Token-based highlighter (built from real lexer output, not guesswork)
+          enum SwiftHighlighter {
+              static func highlight(_ code: String) -> AttributedString {
                   var result = AttributedString(code)
                   result.foregroundColor = Color(white: 0.85)
-                  let def = langDef(for: language)
-                  let nsCode = code as NSString
+                  result.font = .system(size: 13, design: .monospaced)
 
-                  func applyColor(_ pattern: String, _ color: Color) {
-                      guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
-                      let matches = regex.matches(in: code, range: NSRange(location: 0, length: nsCode.length))
-                      for m in matches {
-                          guard let range = Range(m.range, in: code),
-                                let attrRange = Range(range, in: result) else { continue }
-                          result[attrRange].foregroundColor = color
+                  for token in SwiftLexer.tokenize(code) {
+                      guard let attrRange = Range(token.range, in: result) else { continue }
+                      result[attrRange].foregroundColor = color(for: token.kind)
+                      if token.kind == .keyword {
+                          result[attrRange].font = .system(size: 13, weight: .semibold, design: .monospaced)
                       }
                   }
-
-                  // Strings
-                  applyColor("\"[^\"]*\"", Color(red: 1.0, green: 0.5, blue: 0.4))
-                  applyColor("'[^']*'", Color(red: 1.0, green: 0.5, blue: 0.4))
-                  // Numbers
-                  applyColor("\\b[0-9]+(\\.[0-9]+)?\\b", Color(red: 0.7, green: 0.55, blue: 1.0))
-                  // Line comments
-                  applyColor("//.*$", Color(white: 0.45))
-                  applyColor("#.*$", Color(white: 0.45))
-                  // Keywords
-                  for kw in def.keywords {
-                      applyColor("\\b\(NSRegularExpression.escapedPattern(for: kw))\\b", Color(red: 1.0, green: 0.35, blue: 0.55))
-                  }
                   return result
+              }
+
+              private static func color(for kind: TokenKind) -> Color {
+                  switch kind {
+                  case .keyword:    return Color(red: 1.00, green: 0.35, blue: 0.55)
+                  case .type:       return Color(red: 0.30, green: 0.85, blue: 0.75)
+                  case .string:     return Color(red: 1.00, green: 0.50, blue: 0.40)
+                  case .number:     return Color(red: 0.70, green: 0.55, blue: 1.00)
+                  case .comment:    return Color(red: 0.40, green: 0.75, blue: 0.40)
+                  case .attribute:  return Color(red: 1.00, green: 0.60, blue: 0.20)
+                  case .identifier: return Color(white: 0.90)
+                  case .punctuation:return Color(white: 0.65)
+                  }
+              }
+          }
+          PXEOF
+          echo "SwiftHighlighter.swift: $(wc -l < SwiftHighlighter.swift) lines"
+
+      - name: Generate Source - SwiftAnalyzer.swift
+        run: |
+          cat > SwiftAnalyzer.swift << 'PXEOF'
+          import Foundation
+
+          enum Severity { case error, warning }
+
+          struct Diagnostic: Identifiable {
+              let id = UUID()
+              let line: Int
+              let message: String
+              let severity: Severity
+              var badToken: String? = nil
+              var suggestion: String? = nil
+          }
+
+          // MARK: - Static analyzer: real algorithms, no execution
+          enum SwiftAnalyzer {
+
+              static func analyze(_ code: String) -> [Diagnostic] {
+                  var diags: [Diagnostic] = []
+                  diags += checkBrackets(code)
+                  diags += checkUnterminatedStrings(code)
+                  diags += checkEmptyFunctions(code)
+                  diags += checkTypos(code)
+                  return diags.sorted { $0.line < $1.line }
+              }
+
+              // Stack-based bracket / parenthesis / brace matcher
+              static func checkBrackets(_ code: String) -> [Diagnostic] {
+                  var stack: [(Character, Int)] = []
+                  var diags: [Diagnostic] = []
+                  var line = 1
+                  let pairs: [Character: Character] = ["(": ")", "{": "}", "[": "]"]
+                  let closers: Set<Character> = [")", "}", "]"]
+
+                  for c in code {
+                      if c == "\n" { line += 1; continue }
+                      if pairs[c] != nil {
+                          stack.append((c, line))
+                      } else if closers.contains(c) {
+                          if let last = stack.last, pairs[last.0] == c {
+                              stack.removeLast()
+                          } else {
+                              diags.append(Diagnostic(line: line, message: "قوس إغلاق غير متوقع '\(c)'", severity: .error))
+                          }
+                      }
+                  }
+                  for (open, ln) in stack {
+                      diags.append(Diagnostic(line: ln, message: "قوس فتح '\(open)' بدون إغلاق مطابق", severity: .error))
+                  }
+                  return diags
+              }
+
+              static func checkUnterminatedStrings(_ code: String) -> [Diagnostic] {
+                  var diags: [Diagnostic] = []
+                  var line = 1
+                  var inString = false
+                  var startLine = 0
+                  var prevChar: Character? = nil
+                  for c in code {
+                      if c == "\n" { line += 1 }
+                      if c == "\"" && prevChar != "\\" {
+                          if !inString { inString = true; startLine = line } else { inString = false }
+                      }
+                      prevChar = c
+                  }
+                  if inString {
+                      diags.append(Diagnostic(line: startLine, message: "نص (String) غير مغلق بعلامة اقتباس مطابقة", severity: .error))
+                  }
+                  return diags
+              }
+
+              static func checkEmptyFunctions(_ code: String) -> [Diagnostic] {
+                  var diags: [Diagnostic] = []
+                  guard let regex = try? NSRegularExpression(pattern: "func\\s+\\w+\\s*\\([^)]*\\)[^{]*\\{\\s*\\}") else { return diags }
+                  let ns = code as NSString
+                  let matches = regex.matches(in: code, range: NSRange(location: 0, length: ns.length))
+                  for m in matches {
+                      let prefix = ns.substring(to: m.range.location)
+                      let lineNum = prefix.components(separatedBy: "\n").count
+                      diags.append(Diagnostic(line: lineNum, message: "دالة فارغة بدون أي تنفيذ داخلها", severity: .warning))
+                  }
+                  return diags
+              }
+
+              // Levenshtein edit-distance DP table
+              static func levenshtein(_ a: String, _ b: String) -> Int {
+                  let aC = Array(a), bC = Array(b)
+                  if aC.isEmpty { return bC.count }
+                  if bC.isEmpty { return aC.count }
+                  var dp = Array(repeating: Array(repeating: 0, count: bC.count + 1), count: aC.count + 1)
+                  for i in 0...aC.count { dp[i][0] = i }
+                  for j in 0...bC.count { dp[0][j] = j }
+                  for i in 1...aC.count {
+                      for j in 1...bC.count {
+                          if aC[i-1] == bC[j-1] {
+                              dp[i][j] = dp[i-1][j-1]
+                          } else {
+                              dp[i][j] = 1 + min(dp[i-1][j], min(dp[i][j-1], dp[i-1][j-1]))
+                          }
+                      }
+                  }
+                  return dp[aC.count][bC.count]
+              }
+
+              // Suggests fixes for near-miss keyword typos using Levenshtein distance <= 1
+              static func checkTypos(_ code: String) -> [Diagnostic] {
+                  var diags: [Diagnostic] = []
+                  let tokens = SwiftLexer.tokenize(code)
+                  for t in tokens where t.kind == .identifier && t.text.count >= 3 {
+                      var bestMatch: String? = nil
+                      var bestDist = Int.max
+                      for kw in SwiftLexer.keywords {
+                          guard abs(kw.count - t.text.count) <= 1 else { continue }
+                          let d = levenshtein(t.text.lowercased(), kw.lowercased())
+                          if d < bestDist { bestDist = d; bestMatch = kw }
+                      }
+                      if let match = bestMatch, bestDist == 1, match != t.text {
+                          diags.append(Diagnostic(
+                              line: t.line,
+                              message: "ربما تقصد '\(match)' بدلاً من '\(t.text)'؟",
+                              severity: .warning,
+                              badToken: t.text,
+                              suggestion: match
+                          ))
+                      }
+                  }
+                  return diags
               }
 
               static func lineCount(_ code: String) -> Int {
                   code.isEmpty ? 0 : code.components(separatedBy: .newlines).count
               }
 
-              static func functionCount(_ code: String, language: String) -> Int {
-                  let markers = ["func ", "def ", "function ", "fn ", "fun "]
-                  var count = 0
-                  for m in markers { count += code.components(separatedBy: m).count - 1 }
-                  return count
+              static func functionCount(_ code: String) -> Int {
+                  code.components(separatedBy: "func ").count - 1
+              }
+
+              // Applies a suggested fix by replacing the first exact-word match on the diagnostic's line
+              static func applyFix(_ diag: Diagnostic, to code: String) -> String {
+                  guard let bad = diag.badToken, let fix = diag.suggestion else { return code }
+                  var lines = code.components(separatedBy: "\n")
+                  guard diag.line - 1 < lines.count, diag.line - 1 >= 0 else { return code }
+                  if let range = lines[diag.line - 1].range(of: bad) {
+                      lines[diag.line - 1].replaceSubrange(range, with: fix)
+                  }
+                  return lines.joined(separator: "\n")
               }
           }
           PXEOF
-          echo "SyntaxHighlighter.swift: $(wc -l < SyntaxHighlighter.swift) lines"
+          echo "SwiftAnalyzer.swift: $(wc -l < SwiftAnalyzer.swift) lines"
 
       - name: Generate Source - PhoneFrameView.swift
         run: |
           cat > PhoneFrameView.swift << 'PXEOF'
           import SwiftUI
-          import WebKit
 
-          // MARK: - Web Live Preview (HTML only)
-          struct WebPreview: UIViewRepresentable {
-              let html: String
-              func makeUIView(context: Context) -> WKWebView { WKWebView() }
-              func updateUIView(_ webView: WKWebView, context: Context) {
-                  webView.loadHTMLString(html, baseURL: nil)
-              }
-          }
-
-          // MARK: - Code Canvas (non-web languages)
           struct CodeCanvas: View {
-              let project: CodeProject
+              let code: String
               var body: some View {
-                  ScrollView {
+                  ScrollView([.vertical, .horizontal]) {
                       HStack(alignment: .top, spacing: 8) {
                           VStack(alignment: .trailing, spacing: 2) {
-                              ForEach(1...max(1, SyntaxHighlighter.lineCount(project.code)), id: \.self) { n in
+                              ForEach(1...max(1, SwiftAnalyzer.lineCount(code)), id: \.self) { n in
                                   Text("\(n)")
                                       .font(.system(size: 11, design: .monospaced))
                                       .foregroundColor(.gray.opacity(0.5))
                               }
                           }
-                          Text(SyntaxHighlighter.highlight(project.code, language: project.language))
-                              .font(.system(size: 12, design: .monospaced))
-                              .frame(maxWidth: .infinity, alignment: .leading)
+                          Text(SwiftHighlighter.highlight(code))
+                              .frame(alignment: .leading)
                       }
                       .padding(10)
                   }
@@ -308,7 +528,6 @@ jobs:
               }
           }
 
-          // MARK: - Phone Frame Mockup
           struct PhoneFrameView<Content: View>: View {
               let content: Content
               init(@ViewBuilder content: () -> Content) { self.content = content() }
@@ -325,32 +544,69 @@ jobs:
                           .padding(.top, 4)
                           .padding(.bottom, 14)
                   }
-                  .background(
-                      RoundedRectangle(cornerRadius: 34, style: .continuous)
-                          .fill(Color.black)
-                  )
-                  .overlay(
-                      RoundedRectangle(cornerRadius: 34, style: .continuous)
-                          .stroke(Color.gray.opacity(0.5), lineWidth: 3)
-                  )
-                  .frame(width: 230, height: 460)
+                  .background(RoundedRectangle(cornerRadius: 34, style: .continuous).fill(Color.black))
+                  .overlay(RoundedRectangle(cornerRadius: 34, style: .continuous).stroke(Color.gray.opacity(0.5), lineWidth: 3))
+                  .frame(width: 250, height: 480)
                   .shadow(color: .black.opacity(0.35), radius: 18, x: 0, y: 10)
-              }
-          }
-
-          // MARK: - Previews for PhoneFrameView
-          #Preview("Code Canvas") {
-              CodeCanvas(project: CodeProject(name: "Sample", language: "Swift", code: "print(\"Hello\")"))
-          }
-          #Preview("Phone Frame") {
-              PhoneFrameView {
-                  Text("Hello")
-                      .frame(width: 200, height: 400)
-                      .background(Color.blue)
               }
           }
           PXEOF
           echo "PhoneFrameView.swift: $(wc -l < PhoneFrameView.swift) lines"
+
+      - name: Generate Source - BuildResultsView.swift
+        run: |
+          cat > BuildResultsView.swift << 'PXEOF'
+          import SwiftUI
+
+          struct BuildResultsView: View {
+              let diagnostics: [Diagnostic]
+              @ObservedObject var loc = LocalizationManager.shared
+              var onApplyFix: (Diagnostic) -> Void
+
+              private var errorCount: Int { diagnostics.filter { $0.severity == .error }.count }
+              private var warningCount: Int { diagnostics.filter { $0.severity == .warning }.count }
+
+              var body: some View {
+                  VStack(alignment: .leading, spacing: 10) {
+                      HStack {
+                          Text(loc.t("build_results")).font(.headline)
+                          Spacer()
+                          if !diagnostics.isEmpty {
+                              Label("\(errorCount)", systemImage: "xmark.octagon.fill")
+                                  .foregroundColor(.red).font(.caption)
+                              Label("\(warningCount)", systemImage: "exclamationmark.triangle.fill")
+                                  .foregroundColor(.yellow).font(.caption)
+                          }
+                      }
+                      if diagnostics.isEmpty {
+                          Label(loc.t("build_succeeded"), systemImage: "checkmark.circle.fill")
+                              .foregroundColor(.green)
+                              .font(.subheadline)
+                      } else {
+                          ForEach(diagnostics) { d in
+                              HStack(alignment: .top, spacing: 8) {
+                                  Image(systemName: d.severity == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
+                                      .foregroundColor(d.severity == .error ? .red : .yellow)
+                                  VStack(alignment: .leading, spacing: 4) {
+                                      Text("\(loc.t("line_label")) \(d.line): \(d.message)")
+                                          .font(.caption)
+                                      if d.suggestion != nil {
+                                          Button(loc.t("apply_fix")) { onApplyFix(d) }
+                                              .font(.caption2)
+                                              .buttonStyle(.bordered)
+                                      }
+                                  }
+                              }
+                          }
+                      }
+                  }
+                  .padding()
+                  .background(RoundedRectangle(cornerRadius: 14).fill(Color(white: 0.12)))
+                  .padding(.horizontal)
+              }
+          }
+          PXEOF
+          echo "BuildResultsView.swift: $(wc -l < BuildResultsView.swift) lines"
 
       - name: Generate Source - AddProjectView.swift
         run: |
@@ -363,7 +619,6 @@ jobs:
               @Environment(\.dismiss) var dismiss
 
               @State private var name: String = ""
-              @State private var language: String = supportedLanguages[0].name
               @State private var code: String = ""
 
               var body: some View {
@@ -372,18 +627,10 @@ jobs:
                           Section(loc.t("project_name")) {
                               TextField(loc.t("project_name"), text: $name)
                           }
-                          Section(loc.t("select_language")) {
-                              Picker(loc.t("select_language"), selection: $language) {
-                                  ForEach(supportedLanguages) { l in
-                                      Text(l.name).tag(l.name)
-                                  }
-                              }
-                              .pickerStyle(.menu)
-                          }
                           Section(loc.t("code_content")) {
                               TextEditor(text: $code)
                                   .font(.system(size: 13, design: .monospaced))
-                                  .frame(minHeight: 220)
+                                  .frame(minHeight: 260)
                           }
                       }
                       .navigationTitle(loc.t("add_project"))
@@ -393,7 +640,7 @@ jobs:
                           }
                           ToolbarItem(placement: .confirmationAction) {
                               Button(loc.t("save")) {
-                                  let project = CodeProject(name: name.isEmpty ? language : name, language: language, code: code)
+                                  let project = CodeProject(name: name.isEmpty ? "Swift" : name, code: code)
                                   store.add(project)
                                   dismiss()
                               }
@@ -404,16 +651,6 @@ jobs:
                   .environment(\.layoutDirection, loc.language.layoutDirection)
               }
           }
-
-          // MARK: - Previews
-          #Preview("Add Project (Arabic)") {
-              AddProjectView(store: ProjectsStore())
-                  .environmentObject(LocalizationManager.shared)
-          }
-          #Preview("Add Project (English)") {
-              AddProjectView(store: ProjectsStore())
-                  .environmentObject(LocalizationManager.shared)
-          }
           PXEOF
           echo "AddProjectView.swift: $(wc -l < AddProjectView.swift) lines"
 
@@ -423,10 +660,11 @@ jobs:
           import SwiftUI
 
           struct ProjectDetailView: View {
-              let project: CodeProject
+              @ObservedObject var store: ProjectsStore
               @ObservedObject var loc = LocalizationManager.shared
-
-              private var isWeb: Bool { langDef(for: project.language).isWeb }
+              @State var project: CodeProject
+              @State private var diagnostics: [Diagnostic] = []
+              @State private var hasBuilt = false
 
               private var dateString: String {
                   let f = DateFormatter()
@@ -437,31 +675,33 @@ jobs:
 
               var body: some View {
                   ScrollView {
-                      VStack(spacing: 20) {
-                          PhoneFrameView {
-                              if isWeb {
-                                  WebPreview(html: project.code)
-                              } else {
-                                  CodeCanvas(project: project)
-                              }
-                          }
-                          .padding(.top, 10)
+                      VStack(spacing: 18) {
+                          PhoneFrameView { CodeCanvas(code: project.code) }
+                              .padding(.top, 10)
 
-                          if !isWeb {
-                              Text(loc.t("static_canvas"))
-                                  .font(.footnote)
-                                  .foregroundColor(.gray)
-                                  .multilineTextAlignment(.center)
-                                  .padding(.horizontal, 24)
+                          Button {
+                              diagnostics = SwiftAnalyzer.analyze(project.code)
+                              hasBuilt = true
+                          } label: {
+                              Label(loc.t("build"), systemImage: "hammer.fill")
+                                  .frame(maxWidth: .infinity)
+                          }
+                          .buttonStyle(.borderedProminent)
+                          .padding(.horizontal)
+
+                          if hasBuilt {
+                              BuildResultsView(diagnostics: diagnostics) { diag in
+                                  project.code = SwiftAnalyzer.applyFix(diag, to: project.code)
+                                  store.update(project)
+                                  diagnostics = SwiftAnalyzer.analyze(project.code)
+                              }
                           }
 
                           VStack(alignment: .leading, spacing: 12) {
-                              Text(loc.t("inspector"))
-                                  .font(.headline)
-                              inspectorRow(loc.t("language_field"), project.language)
-                              inspectorRow(loc.t("lines"), "\(SyntaxHighlighter.lineCount(project.code))")
+                              Text(loc.t("inspector")).font(.headline)
+                              inspectorRow(loc.t("lines"), "\(SwiftAnalyzer.lineCount(project.code))")
                               inspectorRow(loc.t("characters"), "\(project.code.count)")
-                              inspectorRow(loc.t("functions"), "\(SyntaxHighlighter.functionCount(project.code, language: project.language))")
+                              inspectorRow(loc.t("functions"), "\(SwiftAnalyzer.functionCount(project.code))")
                               inspectorRow(loc.t("created"), dateString)
                           }
                           .padding()
@@ -483,28 +723,6 @@ jobs:
                   .font(.subheadline)
               }
           }
-
-          // MARK: - Previews
-          #Preview("Swift Project") {
-              NavigationStack {
-                  ProjectDetailView(project: CodeProject(
-                      name: "HelloSwift",
-                      language: "Swift",
-                      code: "func sayHello() {\n    print(\"Hello, World!\")\n}"
-                  ))
-              }
-              .environmentObject(LocalizationManager.shared)
-          }
-          #Preview("HTML Project") {
-              NavigationStack {
-                  ProjectDetailView(project: CodeProject(
-                      name: "MyPage",
-                      language: "HTML",
-                      code: "<h1>Hello</h1><p>This is a preview.</p>"
-                  ))
-              }
-              .environmentObject(LocalizationManager.shared)
-          }
           PXEOF
           echo "ProjectDetailView.swift: $(wc -l < ProjectDetailView.swift) lines"
 
@@ -523,7 +741,7 @@ jobs:
                       Group {
                           if store.projects.isEmpty {
                               VStack(spacing: 10) {
-                                  Image(systemName: "chevron.left.slash.chevron.right")
+                                  Image(systemName: "hammer.circle")
                                       .font(.system(size: 40))
                                       .foregroundColor(.gray)
                                   Text(loc.t("no_projects"))
@@ -534,10 +752,10 @@ jobs:
                           } else {
                               List {
                                   ForEach(store.projects) { project in
-                                      NavigationLink(destination: ProjectDetailView(project: project)) {
+                                      NavigationLink(destination: ProjectDetailView(store: store, project: project)) {
                                           VStack(alignment: .leading, spacing: 4) {
                                               Text(project.name).font(.headline)
-                                              Text(project.language)
+                                              Text("\(SwiftAnalyzer.lineCount(project.code)) \(loc.t("lines"))")
                                                   .font(.caption)
                                                   .foregroundColor(.gray)
                                           }
@@ -561,21 +779,6 @@ jobs:
                   }
                   .environment(\.layoutDirection, loc.language.layoutDirection)
               }
-          }
-
-          // MARK: - Previews
-          #Preview("Empty List") {
-              ProjectsListView(store: ProjectsStore())
-                  .environmentObject(LocalizationManager.shared)
-          }
-          #Preview("With Projects") {
-              let store = ProjectsStore()
-              store.projects = [
-                  CodeProject(name: "MyApp", language: "Swift", code: "print(\"Hello\")"),
-                  CodeProject(name: "Website", language: "HTML", code: "<h1>Hi</h1>")
-              ]
-              return ProjectsListView(store: store)
-                  .environmentObject(LocalizationManager.shared)
           }
           PXEOF
           echo "ProjectsListView.swift: $(wc -l < ProjectsListView.swift) lines"
@@ -610,12 +813,6 @@ jobs:
                   .environment(\.layoutDirection, loc.language.layoutDirection)
               }
           }
-
-          // MARK: - Preview
-          #Preview("Settings") {
-              SettingsView()
-                  .environmentObject(LocalizationManager.shared)
-          }
           PXEOF
           echo "SettingsView.swift: $(wc -l < SettingsView.swift) lines"
 
@@ -631,19 +828,13 @@ jobs:
               var body: some View {
                   TabView {
                       ProjectsListView(store: store)
-                          .tabItem { Label(loc.t("tab_projects"), systemImage: "square.grid.2x2") }
+                          .tabItem { Label(loc.t("tab_projects"), systemImage: "hammer") }
                       SettingsView()
                           .tabItem { Label(loc.t("tab_settings"), systemImage: "gearshape") }
                   }
                   .environment(\.layoutDirection, loc.language.layoutDirection)
                   .preferredColorScheme(.dark)
               }
-          }
-
-          // MARK: - Preview
-          #Preview("Main App") {
-              ContentView()
-                  .environmentObject(LocalizationManager.shared)
           }
           PXEOF
           echo "ContentView.swift: $(wc -l < ContentView.swift) lines"
@@ -671,8 +862,11 @@ jobs:
           xcrun swiftc \
             Localization.swift \
             Models.swift \
-            SyntaxHighlighter.swift \
+            SwiftLexer.swift \
+            SwiftHighlighter.swift \
+            SwiftAnalyzer.swift \
             PhoneFrameView.swift \
+            BuildResultsView.swift \
             AddProjectView.swift \
             ProjectDetailView.swift \
             ProjectsListView.swift \
@@ -686,7 +880,6 @@ jobs:
             -framework SwiftUI \
             -framework UIKit \
             -framework Foundation \
-            -framework WebKit \
             -o PreviewX
           file PreviewX
 
@@ -707,5 +900,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PreviewX-IPA-SwiftUI-v1
+          name: PreviewX-Swift-IPA-v2
           path: artifacts/PreviewX.ipa
