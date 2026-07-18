@@ -1,148 +1,640 @@
-name: OTA Builder
+name: Build_PreviewX_SwiftUI
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
-
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
-      - name: Checkout
+
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Create folders
+      - name: Setup Xcode
         run: |
-          mkdir -p apps
-          mkdir -p manifests
-          mkdir -p public
+          sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+          xcode-select -p
+          swift --version
 
-      - name: Find IPA files
-        id: find_ipa
+      - name: Setup Dependencies
+        run: brew install ldid zip
+
+      - name: Generate App Icons
         run: |
-          echo "Searching for IPA files..."
-          if [ -d "apps" ]; then
-            ipa_files=$(find apps -name "*.ipa" -type f 2>/dev/null || echo "")
-            echo "ipa_files=$ipa_files" >> $GITHUB_OUTPUT
-            echo "Found IPA files:"
-            echo "$ipa_files"
-          else
-            echo "ipa_files=" >> $GITHUB_OUTPUT
-            echo "No apps folder found"
-          fi
+          mkdir -p Resources
+          python3 -m pip install --quiet --break-system-packages Pillow
+          python3 << 'PYIEOF'
+          from PIL import Image, ImageDraw, ImageFont
+          def make_icon(size, path):
+              img  = Image.new("RGB", (size, size), (12, 12, 22))
+              draw = ImageDraw.Draw(img)
+              for y in range(size):
+                  t = y/size
+                  draw.line([(0,y),(size,y)], fill=(int(30*(1-t)+90*t), int(140*(1-t)+60*t), int(220*(1-t)+240*t)))
+              draw.rounded_rectangle([size*.16,size*.22,size*.84,size*.86],
+                  radius=size*.14, outline=(255,255,255), width=max(2,size//30))
+              try:
+                  font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Menlo.ttc", int(size*.24))
+              except Exception:
+                  font = ImageFont.load_default()
+              bbox = draw.textbbox((0,0),"</>",font=font)
+              tw,th = bbox[2]-bbox[0], bbox[3]-bbox[1]
+              draw.text(((size-tw)/2-bbox[0],(size-th)/2-bbox[1]),"</>",fill=(255,255,255),font=font)
+              img.save(path)
+          make_icon(120,  "Resources/AppIcon60x60@2x.png")
+          make_icon(152,  "Resources/AppIcon76x76@2x~ipad.png")
+          make_icon(1024, "Resources/AppIcon1024x1024.png")
+          PYIEOF
+          ls -lh Resources
 
-      - name: Generate apps.json
+      - name: Generate Info.plist
         run: |
-          echo '{"apps": []}' > public/apps.json
+          mkdir -p Resources
+          cat > Resources/Info.plist << 'PEOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>          <string>PreviewX</string>
+              <key>CFBundleIdentifier</key>          <string>com.previewx.app</string>
+              <key>CFBundleName</key>                <string>PreviewX</string>
+              <key>CFBundleDisplayName</key>         <string>PreviewX</string>
+              <key>CFBundlePackageType</key>         <string>APPL</string>
+              <key>CFBundleShortVersionString</key>  <string>1.0</string>
+              <key>CFBundleVersion</key>             <string>1</string>
+              <key>LSRequiresIPhoneOS</key>          <true/>
+              <key>MinimumOSVersion</key>            <string>16.0</string>
+              <key>UIDeviceFamily</key>
+              <array><integer>1</integer><integer>2</integer></array>
+              <key>UIRequiredDeviceCapabilities</key>
+              <array><string>arm64</string></array>
+              <key>UISupportedInterfaceOrientations</key>
+              <array><string>UIInterfaceOrientationPortrait</string></array>
+              <key>UILaunchScreen</key><dict/>
+              <key>CFBundleLocalizations</key>
+              <array><string>ar</string><string>en</string></array>
+              <key>CFBundleDevelopmentRegion</key>   <string>ar</string>
+          </dict>
+          </plist>
+          PEOF
 
-          if [ -d "apps" ] && [ -n "$(find apps -name '*.ipa' -type f 2>/dev/null)" ]; then
-            echo "[" > public/apps_temp.json
-            first=true
-            for ipa in $(find apps -name "*.ipa" -type f 2>/dev/null); do
-              filename=$(basename "$ipa")
-              name="${filename%.*}"
-              bundle_id=$(echo "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
-
-              if [ "$first" = true ]; then
-                first=false
-              else
-                echo "," >> public/apps_temp.json
-              fi
-
-              {
-                echo "  {"
-                echo "    \"name\": \"$name\","
-                echo "    \"bundle_id\": \"com.example.$bundle_id\","
-                echo "    \"ipa\": \"$filename\","
-                echo "    \"icon\": \"\","
-                echo "    \"version\": \"1.0\""
-                echo "  }"
-              } >> public/apps_temp.json
-            done
-            echo "]" >> public/apps_temp.json
-            mv public/apps_temp.json public/apps.json
-          fi
-
-      - name: Generate manifest for each IPA
+      - name: Generate Source - Localization.swift
         run: |
-          if [ -d "apps" ] && [ -n "$(find apps -name '*.ipa' -type f 2>/dev/null)" ]; then
-            for ipa in $(find apps -name "*.ipa" -type f 2>/dev/null); do
-              filename=$(basename "$ipa")
-              name="${filename%.*}"
-              bundle_id=$(echo "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+          cat > Localization.swift << 'PXEOF'
+          import SwiftUI
+          import Foundation
 
-              {
-                echo '<?xml version="1.0" encoding="UTF-8"?>'
-                echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
-                echo '<plist version="1.0">'
-                echo '<dict>'
-                echo '  <key>items</key>'
-                echo '  <array>'
-                echo '    <dict>'
-                echo '      <key>assets</key>'
-                echo '      <array>'
-                echo '        <dict>'
-                echo '          <key>kind</key>'
-                echo '          <string>software-package</string>'
-                echo '          <key>url</key>'
-                echo "          <string>https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/apps/${filename}</string>"
-                echo '        </dict>'
-                echo '      </array>'
-                echo '      <key>metadata</key>'
-                echo '      <dict>'
-                echo '        <key>bundle-identifier</key>'
-                echo "        <string>com.example.${bundle_id}</string>"
-                echo '        <key>bundle-version</key>'
-                echo '        <string>1.0</string>'
-                echo '        <key>kind</key>'
-                echo '        <string>software</string>'
-                echo '        <key>title</key>'
-                echo "        <string>${name}</string>"
-                echo '      </dict>'
-                echo '    </dict>'
-                echo '  </array>'
-                echo '</dict>'
-                echo '</plist>'
-              } > "manifests/${name}.plist"
+          // MARK: - App Language
+          enum AppLanguage: String, CaseIterable, Identifiable {
+              case ar, en
+              var id: String { rawValue }
+              var displayName: String { self == .ar ? "العربية" : "English" }
+              var layoutDirection: LayoutDirection { self == .ar ? .rightToLeft : .leftToRight }
+          }
 
-              echo "Generated manifest for: $name"
-            done
-          else
-            echo "No IPA files found to generate manifests"
-          fi
+          // MARK: - Localization Manager
+          final class LocalizationManager: ObservableObject {
+              static let shared = LocalizationManager()
+              @Published var language: AppLanguage = .ar
 
-      - name: Generate install_links.html
+              private let table: [String: [AppLanguage: String]] = [
+                  "app_title":        [.ar: "بريفيو إكس", .en: "PreviewX"],
+                  "tab_projects":     [.ar: "المشاريع", .en: "Projects"],
+                  "tab_settings":     [.ar: "الإعدادات", .en: "Settings"],
+                  "no_projects":      [.ar: "لا توجد مشاريع بعد. اضغط + لإضافة مشروع جديد", .en: "No projects yet. Tap + to add one"],
+                  "add_project":      [.ar: "مشروع جديد", .en: "New Project"],
+                  "project_name":     [.ar: "اسم المشروع", .en: "Project Name"],
+                  "select_language":  [.ar: "لغة البرمجة", .en: "Programming Language"],
+                  "code_content":     [.ar: "الكود", .en: "Code"],
+                  "code_placeholder": [.ar: "اكتب أو الصق الكود هنا...", .en: "Write or paste code here..."],
+                  "save":             [.ar: "حفظ", .en: "Save"],
+                  "cancel":           [.ar: "إلغاء", .en: "Cancel"],
+                  "delete":           [.ar: "حذف", .en: "Delete"],
+                  "preview":          [.ar: "المعاينة", .en: "Preview"],
+                  "inspector":        [.ar: "مفتش الملف", .en: "File Inspector"],
+                  "lines":            [.ar: "عدد الأسطر", .en: "Lines"],
+                  "characters":       [.ar: "عدد الأحرف", .en: "Characters"],
+                  "functions":        [.ar: "عدد الدوال", .en: "Functions"],
+                  "created":          [.ar: "تاريخ الإنشاء", .en: "Created"],
+                  "language_field":   [.ar: "اللغة", .en: "Language"],
+                  "live_preview":     [.ar: "معاينة حية", .en: "Live Preview"],
+                  "static_canvas":    [.ar: "لا تتوفر معاينة تنفيذية لهذه اللغة على الجهاز — المعروض هو محرر كود مع تفاصيل الملف، وليس تنفيذاً فعلياً للكود",
+                                       .en: "This language can't be executed on-device — shown below is a code canvas with file details, not a real execution"],
+                  "app_language":     [.ar: "لغة التطبيق", .en: "App Language"],
+                  "about":            [.ar: "عن التطبيق", .en: "About"],
+                  "about_text":       [.ar: "بريفيو إكس يعرض مشاريعك البرمجية داخل إطار جوال بأسلوب أقرب لمعاينة Xcode، مع تمييز صياغة الكود ودعم عدة لغات برمجة وواجهة ثنائية اللغة",
+                                       .en: "PreviewX shows your code projects inside a phone frame styled like Xcode's canvas, with syntax highlighting across many languages and a bilingual interface"],
+              ]
+
+              func t(_ key: String) -> String {
+                  table[key]?[language] ?? key
+              }
+          }
+          PXEOF
+          echo "Localization.swift: $(wc -l < Localization.swift) lines"
+
+      - name: Generate Source - Models.swift
         run: |
-          echo '<!DOCTYPE html>' > public/install_links.html
-          echo '<html>' >> public/install_links.html
-          echo '<head>' >> public/install_links.html
-          echo '  <meta charset="UTF-8">' >> public/install_links.html
-          echo '  <meta name="viewport" content="width=device-width, initial-scale=1.0">' >> public/install_links.html
-          echo '  <title>OTA Installer - Install Apps</title>' >> public/install_links.html
-          echo '  <style>' >> public/install_links.html
-          echo '    * { margin: 0; padding: 0; box-sizing: border-box; }' >> public/install_links.html
-          echo '    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; min-height: 100vh; }' >> public/install_links.html
-          echo '    .header { background: white; padding: 24px; border-radius: 16px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); text-align: center; }' >> public/install_links.html
-          echo '    h1 { margin: 0; color: #1a1a1a; font-size: 28px; font-weight: 700; }' >> public/install_links.html
-          echo '    .subtitle { color: #666; margin-top: 8px; font-size: 16px; }' >> public/install_links.html
-          echo '    .app-card { background: white; border-radius: 16px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: space-between; transition: transform 0.2s, box-shadow 0.2s; }' >> public/install_links.html
-          echo '    .app-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }' >> public/install_links.html
-          echo '    .app-info { flex: 1; margin-right: 16px; }' >> public/install_links.html
-          echo '    .app-name { font-size: 18px; font-weight: 600; color: #1a1a1a; }' >> public/install_links.html
-          echo '    .app-details { color: #666; font-size: 14px; margin-top: 4px; }' >> public/install_links.html
-          echo '    .app-version { color: #999; font-size: 12px; margin-top: 2px; }' >> public/install_links.html
-          echo '    .install-btn { background: #007aff; color: white; border: none; padding: 10px 28px; border-radius: 20px; font-size: 16px; font-weight: 500; cursor: pointer; text-decoration: none; display: inline-block; transition: background 0.2s, transform 0.2s; white-space: nowrap; }' >> public/install_links.html
-          echo '    .install-btn:hover { background: #0056b3; transform: scale(1.02); }' >> public/install_links.html
-          echo '    .install-btn:active { transform: scale(0.98); }' >> public/install_links.html
-          echo '    .no-apps { text-align: center; padding: 60px 20px; color: #666; background: white; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,
+          cat > Models.swift << 'PXEOF'
+          import SwiftUI
+          import Foundation
+
+          // MARK: - Code Project Model
+          struct CodeProject: Identifiable, Codable, Equatable {
+              var id: UUID = UUID()
+              var name: String
+              var language: String
+              var code: String
+              var createdAt: Date = Date()
+          }
+
+          // MARK: - Projects Store (local persistence)
+          final class ProjectsStore: ObservableObject {
+              @Published var projects: [CodeProject] = []
+              private let fileURL: URL
+
+              init() {
+                  let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                  fileURL = dir.appendingPathComponent("previewx_projects.json")
+                  load()
+              }
+
+              func load() {
+                  guard let data = try? Data(contentsOf: fileURL),
+                        let decoded = try? JSONDecoder().decode([CodeProject].self, from: data) else { return }
+                  projects = decoded
+              }
+
+              func save() {
+                  guard let data = try? JSONEncoder().encode(projects) else { return }
+                  try? data.write(to: fileURL, options: .atomic)
+              }
+
+              func add(_ project: CodeProject) {
+                  projects.insert(project, at: 0)
+                  save()
+              }
+
+              func delete(at offsets: IndexSet) {
+                  projects.remove(atOffsets: offsets)
+                  save()
+              }
+          }
+          PXEOF
+          echo "Models.swift: $(wc -l < Models.swift) lines"
+
+      - name: Generate Source - SyntaxHighlighter.swift
+        run: |
+          cat > SyntaxHighlighter.swift << 'PXEOF'
+          import SwiftUI
+          import Foundation
+
+          // MARK: - Language Definition
+          struct LangDef: Identifiable {
+              var id: String { name }
+              let name: String
+              let keywords: [String]
+              let isWeb: Bool
+          }
+
+          let supportedLanguages: [LangDef] = [
+              LangDef(name: "Swift", keywords: ["func","var","let","if","else","for","while","struct","class","enum","protocol","import","return","guard","switch","case","default","private","public","extension","init","self","true","false","nil"], isWeb: false),
+              LangDef(name: "Python", keywords: ["def","class","if","elif","else","for","while","import","from","return","try","except","with","as","lambda","True","False","None","self","print"], isWeb: false),
+              LangDef(name: "JavaScript", keywords: ["function","var","let","const","if","else","for","while","return","class","import","export","true","false","null","undefined","this","new","try","catch"], isWeb: false),
+              LangDef(name: "TypeScript", keywords: ["function","let","const","interface","type","if","else","for","while","return","class","import","export","true","false","null","undefined","this","new","implements"], isWeb: false),
+              LangDef(name: "HTML", keywords: ["html","head","body","div","span","script","style","link","meta","title","href","src","class","id"], isWeb: true),
+              LangDef(name: "CSS", keywords: ["color","background","margin","padding","display","flex","grid","width","height","border","position"], isWeb: false),
+              LangDef(name: "Java", keywords: ["public","private","class","void","static","if","else","for","while","return","import","new","this","extends","implements","true","false","null"], isWeb: false),
+              LangDef(name: "Kotlin", keywords: ["fun","val","var","if","else","for","while","class","return","import","when","true","false","null","this","object"], isWeb: false),
+              LangDef(name: "C", keywords: ["int","char","float","double","void","if","else","for","while","return","struct","include","define","static"], isWeb: false),
+              LangDef(name: "C++", keywords: ["int","class","void","if","else","for","while","return","include","namespace","using","new","delete","public","private","template"], isWeb: false),
+              LangDef(name: "C#", keywords: ["public","private","class","void","static","if","else","for","while","return","using","namespace","new","this","true","false","null"], isWeb: false),
+              LangDef(name: "PHP", keywords: ["function","echo","if","else","for","while","return","class","public","private","new","true","false","null","array"], isWeb: false),
+              LangDef(name: "Ruby", keywords: ["def","end","if","elsif","else","class","module","return","true","false","nil","puts","require"], isWeb: false),
+              LangDef(name: "Go", keywords: ["func","var","const","if","else","for","return","package","import","struct","interface","true","false","nil"], isWeb: false),
+              LangDef(name: "Rust", keywords: ["fn","let","mut","if","else","for","while","return","struct","enum","impl","use","true","false","match"], isWeb: false),
+              LangDef(name: "Dart", keywords: ["void","var","final","if","else","for","while","return","class","import","true","false","null","this"], isWeb: false),
+          ]
+
+          func langDef(for name: String) -> LangDef {
+              supportedLanguages.first(where: { $0.name == name }) ?? supportedLanguages[0]
+          }
+
+          // MARK: - Basic Multi-Language Highlighter
+          enum SyntaxHighlighter {
+              static func highlight(_ code: String, language: String) -> AttributedString {
+                  var result = AttributedString(code)
+                  result.foregroundColor = Color(white: 0.85)
+                  let def = langDef(for: language)
+                  let nsCode = code as NSString
+
+                  func applyColor(_ pattern: String, _ color: Color) {
+                      guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+                      let matches = regex.matches(in: code, range: NSRange(location: 0, length: nsCode.length))
+                      for m in matches {
+                          guard let range = Range(m.range, in: code),
+                                let attrRange = Range(range, in: result) else { continue }
+                          result[attrRange].foregroundColor = color
+                      }
+                  }
+
+                  // Strings
+                  applyColor("\"[^\"]*\"", Color(red: 1.0, green: 0.5, blue: 0.4))
+                  applyColor("'[^']*'", Color(red: 1.0, green: 0.5, blue: 0.4))
+                  // Numbers
+                  applyColor("\\b[0-9]+(\\.[0-9]+)?\\b", Color(red: 0.7, green: 0.55, blue: 1.0))
+                  // Line comments
+                  applyColor("//.*$", Color(white: 0.45))
+                  applyColor("#.*$", Color(white: 0.45))
+                  // Keywords
+                  for kw in def.keywords {
+                      applyColor("\\b\(NSRegularExpression.escapedPattern(for: kw))\\b", Color(red: 1.0, green: 0.35, blue: 0.55))
+                  }
+                  return result
+              }
+
+              static func lineCount(_ code: String) -> Int {
+                  code.isEmpty ? 0 : code.components(separatedBy: .newlines).count
+              }
+
+              static func functionCount(_ code: String, language: String) -> Int {
+                  let markers = ["func ", "def ", "function ", "fn ", "fun "]
+                  var count = 0
+                  for m in markers { count += code.components(separatedBy: m).count - 1 }
+                  return count
+              }
+          }
+          PXEOF
+          echo "SyntaxHighlighter.swift: $(wc -l < SyntaxHighlighter.swift) lines"
+
+      - name: Generate Source - PhoneFrameView.swift
+        run: |
+          cat > PhoneFrameView.swift << 'PXEOF'
+          import SwiftUI
+          import WebKit
+
+          // MARK: - Web Live Preview (HTML only)
+          struct WebPreview: UIViewRepresentable {
+              let html: String
+              func makeUIView(context: Context) -> WKWebView { WKWebView() }
+              func updateUIView(_ webView: WKWebView, context: Context) {
+                  webView.loadHTMLString(html, baseURL: nil)
+              }
+          }
+
+          // MARK: - Code Canvas (non-web languages)
+          struct CodeCanvas: View {
+              let project: CodeProject
+              var body: some View {
+                  ScrollView {
+                      HStack(alignment: .top, spacing: 8) {
+                          VStack(alignment: .trailing, spacing: 2) {
+                              ForEach(1...max(1, SyntaxHighlighter.lineCount(project.code)), id: \.self) { n in
+                                  Text("\(n)")
+                                      .font(.system(size: 11, design: .monospaced))
+                                      .foregroundColor(.gray.opacity(0.5))
+                              }
+                          }
+                          Text(SyntaxHighlighter.highlight(project.code, language: project.language))
+                              .font(.system(size: 12, design: .monospaced))
+                              .frame(maxWidth: .infinity, alignment: .leading)
+                      }
+                      .padding(10)
+                  }
+                  .background(Color(red: 0.09, green: 0.09, blue: 0.13))
+              }
+          }
+
+          // MARK: - Phone Frame Mockup
+          struct PhoneFrameView<Content: View>: View {
+              let content: Content
+              init(@ViewBuilder content: () -> Content) { self.content = content() }
+
+              var body: some View {
+                  VStack(spacing: 0) {
+                      Capsule()
+                          .fill(Color.black)
+                          .frame(width: 90, height: 22)
+                          .padding(.top, 8)
+                      content
+                          .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                          .padding(.horizontal, 10)
+                          .padding(.top, 4)
+                          .padding(.bottom, 14)
+                  }
+                  .background(
+                      RoundedRectangle(cornerRadius: 34, style: .continuous)
+                          .fill(Color.black)
+                  )
+                  .overlay(
+                      RoundedRectangle(cornerRadius: 34, style: .continuous)
+                          .stroke(Color.gray.opacity(0.5), lineWidth: 3)
+                  )
+                  .frame(width: 230, height: 460)
+                  .shadow(color: .black.opacity(0.35), radius: 18, x: 0, y: 10)
+              }
+          }
+          PXEOF
+          echo "PhoneFrameView.swift: $(wc -l < PhoneFrameView.swift) lines"
+
+      - name: Generate Source - AddProjectView.swift
+        run: |
+          cat > AddProjectView.swift << 'PXEOF'
+          import SwiftUI
+
+          struct AddProjectView: View {
+              @ObservedObject var store: ProjectsStore
+              @ObservedObject var loc = LocalizationManager.shared
+              @Environment(\.dismiss) var dismiss
+
+              @State private var name: String = ""
+              @State private var language: String = supportedLanguages[0].name
+              @State private var code: String = ""
+
+              var body: some View {
+                  NavigationStack {
+                      Form {
+                          Section(loc.t("project_name")) {
+                              TextField(loc.t("project_name"), text: $name)
+                          }
+                          Section(loc.t("select_language")) {
+                              Picker(loc.t("select_language"), selection: $language) {
+                                  ForEach(supportedLanguages) { l in
+                                      Text(l.name).tag(l.name)
+                                  }
+                              }
+                              .pickerStyle(.menu)
+                          }
+                          Section(loc.t("code_content")) {
+                              TextEditor(text: $code)
+                                  .font(.system(size: 13, design: .monospaced))
+                                  .frame(minHeight: 220)
+                          }
+                      }
+                      .navigationTitle(loc.t("add_project"))
+                      .toolbar {
+                          ToolbarItem(placement: .cancellationAction) {
+                              Button(loc.t("cancel")) { dismiss() }
+                          }
+                          ToolbarItem(placement: .confirmationAction) {
+                              Button(loc.t("save")) {
+                                  let project = CodeProject(name: name.isEmpty ? language : name, language: language, code: code)
+                                  store.add(project)
+                                  dismiss()
+                              }
+                              .disabled(code.isEmpty)
+                          }
+                      }
+                  }
+                  .environment(\.layoutDirection, loc.language.layoutDirection)
+              }
+          }
+          PXEOF
+          echo "AddProjectView.swift: $(wc -l < AddProjectView.swift) lines"
+
+      - name: Generate Source - ProjectDetailView.swift
+        run: |
+          cat > ProjectDetailView.swift << 'PXEOF'
+          import SwiftUI
+
+          struct ProjectDetailView: View {
+              let project: CodeProject
+              @ObservedObject var loc = LocalizationManager.shared
+
+              private var isWeb: Bool { langDef(for: project.language).isWeb }
+
+              private var dateString: String {
+                  let f = DateFormatter()
+                  f.dateStyle = .medium
+                  f.timeStyle = .short
+                  return f.string(from: project.createdAt)
+              }
+
+              var body: some View {
+                  ScrollView {
+                      VStack(spacing: 20) {
+                          PhoneFrameView {
+                              if isWeb {
+                                  WebPreview(html: project.code)
+                              } else {
+                                  CodeCanvas(project: project)
+                              }
+                          }
+                          .padding(.top, 10)
+
+                          if !isWeb {
+                              Text(loc.t("static_canvas"))
+                                  .font(.footnote)
+                                  .foregroundColor(.gray)
+                                  .multilineTextAlignment(.center)
+                                  .padding(.horizontal, 24)
+                          }
+
+                          VStack(alignment: .leading, spacing: 12) {
+                              Text(loc.t("inspector"))
+                                  .font(.headline)
+                              inspectorRow(loc.t("language_field"), project.language)
+                              inspectorRow(loc.t("lines"), "\(SyntaxHighlighter.lineCount(project.code))")
+                              inspectorRow(loc.t("characters"), "\(project.code.count)")
+                              inspectorRow(loc.t("functions"), "\(SyntaxHighlighter.functionCount(project.code, language: project.language))")
+                              inspectorRow(loc.t("created"), dateString)
+                          }
+                          .padding()
+                          .background(RoundedRectangle(cornerRadius: 14).fill(Color(white: 0.12)))
+                          .padding(.horizontal)
+                      }
+                      .padding(.bottom, 30)
+                  }
+                  .navigationTitle(project.name)
+                  .environment(\.layoutDirection, loc.language.layoutDirection)
+              }
+
+              private func inspectorRow(_ label: String, _ value: String) -> some View {
+                  HStack {
+                      Text(label).foregroundColor(.gray)
+                      Spacer()
+                      Text(value).fontWeight(.medium)
+                  }
+                  .font(.subheadline)
+              }
+          }
+          PXEOF
+          echo "ProjectDetailView.swift: $(wc -l < ProjectDetailView.swift) lines"
+
+      - name: Generate Source - ProjectsListView.swift
+        run: |
+          cat > ProjectsListView.swift << 'PXEOF'
+          import SwiftUI
+
+          struct ProjectsListView: View {
+              @ObservedObject var store: ProjectsStore
+              @ObservedObject var loc = LocalizationManager.shared
+              @State private var showAdd = false
+
+              var body: some View {
+                  NavigationStack {
+                      Group {
+                          if store.projects.isEmpty {
+                              VStack(spacing: 10) {
+                                  Image(systemName: "chevron.left.slash.chevron.right")
+                                      .font(.system(size: 40))
+                                      .foregroundColor(.gray)
+                                  Text(loc.t("no_projects"))
+                                      .foregroundColor(.gray)
+                                      .multilineTextAlignment(.center)
+                                      .padding(.horizontal, 40)
+                              }
+                          } else {
+                              List {
+                                  ForEach(store.projects) { project in
+                                      NavigationLink(destination: ProjectDetailView(project: project)) {
+                                          VStack(alignment: .leading, spacing: 4) {
+                                              Text(project.name).font(.headline)
+                                              Text(project.language)
+                                                  .font(.caption)
+                                                  .foregroundColor(.gray)
+                                          }
+                                      }
+                                  }
+                                  .onDelete(perform: store.delete)
+                              }
+                          }
+                      }
+                      .navigationTitle(loc.t("app_title"))
+                      .toolbar {
+                          ToolbarItem(placement: .primaryAction) {
+                              Button { showAdd = true } label: {
+                                  Image(systemName: "plus.circle.fill")
+                              }
+                          }
+                      }
+                      .sheet(isPresented: $showAdd) {
+                          AddProjectView(store: store)
+                      }
+                  }
+                  .environment(\.layoutDirection, loc.language.layoutDirection)
+              }
+          }
+          PXEOF
+          echo "ProjectsListView.swift: $(wc -l < ProjectsListView.swift) lines"
+
+      - name: Generate Source - SettingsView.swift
+        run: |
+          cat > SettingsView.swift << 'PXEOF'
+          import SwiftUI
+
+          struct SettingsView: View {
+              @ObservedObject var loc = LocalizationManager.shared
+
+              var body: some View {
+                  NavigationStack {
+                      Form {
+                          Section(loc.t("app_language")) {
+                              Picker(loc.t("app_language"), selection: $loc.language) {
+                                  ForEach(AppLanguage.allCases) { lang in
+                                      Text(lang.displayName).tag(lang)
+                                  }
+                              }
+                              .pickerStyle(.segmented)
+                          }
+                          Section(loc.t("about")) {
+                              Text(loc.t("about_text"))
+                                  .font(.footnote)
+                                  .foregroundColor(.gray)
+                          }
+                      }
+                      .navigationTitle(loc.t("tab_settings"))
+                  }
+                  .environment(\.layoutDirection, loc.language.layoutDirection)
+              }
+          }
+          PXEOF
+          echo "SettingsView.swift: $(wc -l < SettingsView.swift) lines"
+
+      - name: Generate Source - ContentView.swift
+        run: |
+          cat > ContentView.swift << 'PXEOF'
+          import SwiftUI
+
+          struct ContentView: View {
+              @StateObject private var store = ProjectsStore()
+              @ObservedObject var loc = LocalizationManager.shared
+
+              var body: some View {
+                  TabView {
+                      ProjectsListView(store: store)
+                          .tabItem { Label(loc.t("tab_projects"), systemImage: "square.grid.2x2") }
+                      SettingsView()
+                          .tabItem { Label(loc.t("tab_settings"), systemImage: "gearshape") }
+                  }
+                  .environment(\.layoutDirection, loc.language.layoutDirection)
+                  .preferredColorScheme(.dark)
+              }
+          }
+          PXEOF
+          echo "ContentView.swift: $(wc -l < ContentView.swift) lines"
+
+      - name: Generate Source - PreviewXApp.swift
+        run: |
+          cat > PreviewXApp.swift << 'PXEOF'
+          import SwiftUI
+
+          @main
+          struct PreviewXApp: App {
+              var body: some Scene {
+                  WindowGroup {
+                      ContentView()
+                  }
+              }
+          }
+          PXEOF
+          echo "PreviewXApp.swift: $(wc -l < PreviewXApp.swift) lines"
+
+      - name: Build Application
+        run: |
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "SDK: $SDK"
+          xcrun swiftc \
+            Localization.swift \
+            Models.swift \
+            SyntaxHighlighter.swift \
+            PhoneFrameView.swift \
+            AddProjectView.swift \
+            ProjectDetailView.swift \
+            ProjectsListView.swift \
+            SettingsView.swift \
+            ContentView.swift \
+            PreviewXApp.swift \
+            -sdk "$SDK" \
+            -target arm64-apple-ios16.0 \
+            -O \
+            -module-name PreviewX \
+            -framework SwiftUI \
+            -framework UIKit \
+            -framework Foundation \
+            -framework WebKit \
+            -o PreviewX
+          file PreviewX
+
+      - name: Create IPA Package
+        run: |
+          mkdir -p artifacts
+          rm -rf build-output
+          mkdir -p build-output/Payload/PreviewX.app
+          cp PreviewX                             build-output/Payload/PreviewX.app/PreviewX
+          cp Resources/Info.plist                 build-output/Payload/PreviewX.app/Info.plist
+          cp Resources/AppIcon60x60@2x.png        build-output/Payload/PreviewX.app/
+          cp Resources/AppIcon76x76@2x~ipad.png   build-output/Payload/PreviewX.app/
+          cp Resources/AppIcon1024x1024.png       build-output/Payload/PreviewX.app/
+          ldid -S build-output/Payload/PreviewX.app/PreviewX
+          cd build-output && zip -r -q ../artifacts/PreviewX.ipa Payload/ && cd ..
+          echo "IPA: $(du -sh artifacts/PreviewX.ipa)"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PreviewX-IPA-SwiftUI-v1
+          path: artifacts/PreviewX.ipa
