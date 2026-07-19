@@ -1,1616 +1,366 @@
-name: Build_PreviewX_Swift_Pro
+name: "📱 iOS IPA Signing"
+
+# ------------------------------------------------------------------------------------
+# This workflow re-signs an iOS .ipa file using an Apple Distribution/Development
+# certificate and a provisioning profile stored as encrypted GitHub Secrets.
+#
+# IMPORTANT: Only use this workflow with IPAs and certificates that you own or have
+# explicit legal rights to sign and redistribute (e.g. your own app builds, enterprise
+# or ad-hoc internal distribution). This is not intended for re-signing third-party
+# or unauthorized app packages.
+# ------------------------------------------------------------------------------------
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
+    inputs:
+      ipa_source:
+        description: "Where to get the IPA from: 'repo' (path in repo) or 'upload' (base64 secret/artifact)"
+        required: true
+        default: "repo"
+        type: choice
+        options:
+          - repo
+          - upload
+      ipa_path:
+        description: "Path to the .ipa inside the repository (used when ipa_source = repo)"
+        required: false
+        default: "input/app.ipa"
+      create_release:
+        description: "Create a GitHub Release and attach the signed IPA?"
+        required: true
+        default: false
+        type: boolean
+      zip_output:
+        description: "Zip the signed IPA before uploading?"
+        required: true
+        default: false
+        type: boolean
+
+# Avoid overlapping runs stepping on the same keychain/profile state
+concurrency:
+  group: ios-ipa-signing-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  KEYCHAIN_NAME: "signing-${{ github.run_id }}.keychain-db"
+  PROFILE_UUID_FILE: "/tmp/profile_uuid.txt"
 
 jobs:
-  build:
+  sign:
+    name: Sign IPA
     runs-on: macos-latest
-    steps:
+    timeout-minutes: 30
 
-      - name: Checkout Code
+    steps:
+      # --------------------------------------------------------------------------
+      # 1. Checkout repository (needed if the IPA is stored in-repo)
+      # --------------------------------------------------------------------------
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Xcode
+      # --------------------------------------------------------------------------
+      # 2. Install/verify required tooling. macos-latest runners already ship
+      #    Xcode command line tools, but we make sure `unzip`/`zip`/`jq` exist.
+      # --------------------------------------------------------------------------
+      - name: Install required tools
         run: |
-          sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+          set -euo pipefail
+          brew list jq &>/dev/null || brew install jq
           xcode-select -p
-          swift --version
+          echo "✅ Tooling verified"
 
-      - name: Setup Dependencies
-        run: brew install ldid zip
-
-      - name: Generate App Icons
+      # --------------------------------------------------------------------------
+      # 3. Obtain the IPA to sign
+      #    - repo: read from a path checked into the repository
+      #    - upload: decode from a base64 GitHub Secret (e.g. uploaded by another
+      #      workflow/job and stored as IPA_BASE64) — adjust as needed for your
+      #      actual upload mechanism (artifact download, external storage, etc.)
+      # --------------------------------------------------------------------------
+      - name: Prepare working IPA (from repo)
+        if: ${{ inputs.ipa_source == 'repo' }}
         run: |
-          mkdir -p Resources
-          python3 -m pip install --quiet --break-system-packages Pillow
-          python3 << 'PYIEOF'
-          from PIL import Image, ImageDraw, ImageFont
-          def make_icon(size, path):
-              img  = Image.new("RGB", (size, size), (12, 12, 22))
-              draw = ImageDraw.Draw(img)
-              for y in range(size):
-                  t = y/size
-                  draw.line([(0,y),(size,y)], fill=(int(30*(1-t)+90*t), int(140*(1-t)+60*t), int(220*(1-t)+240*t)))
-              draw.rounded_rectangle([size*.16,size*.22,size*.84,size*.86],
-                  radius=size*.14, outline=(255,255,255), width=max(2,size//30))
-              try:
-                  font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Menlo.ttc", int(size*.22))
-              except Exception:
-                  font = ImageFont.load_default()
-              bbox = draw.textbbox((0,0),"Sw",font=font)
-              tw,th = bbox[2]-bbox[0], bbox[3]-bbox[1]
-              draw.text(((size-tw)/2-bbox[0],(size-th)/2-bbox[1]),"Sw",fill=(255,255,255),font=font)
-              img.save(path)
-          make_icon(120,  "Resources/AppIcon60x60@2x.png")
-          make_icon(152,  "Resources/AppIcon76x76@2x~ipad.png")
-          make_icon(1024, "Resources/AppIcon1024x1024.png")
-          PYIEOF
+          set -euo pipefail
+          mkdir -p /tmp/signing
+          if [ ! -f "${{ inputs.ipa_path }}" ]; then
+            echo "::error::IPA not found at path: ${{ inputs.ipa_path }}"
+            exit 1
+          fi
+          cp "${{ inputs.ipa_path }}" /tmp/signing/app.ipa
+          echo "✅ IPA copied from repository"
 
-      - name: Generate Info.plist
+      - name: Prepare working IPA (from base64 secret)
+        if: ${{ inputs.ipa_source == 'upload' }}
+        env:
+          IPA_BASE64: ${{ secrets.IPA_BASE64 }}
         run: |
-          mkdir -p Resources
-          cat > Resources/Info.plist << 'PEOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>CFBundleExecutable</key>          <string>PreviewX</string>
-              <key>CFBundleIdentifier</key>          <string>com.previewx.swift</string>
-              <key>CFBundleName</key>                <string>PreviewX</string>
-              <key>CFBundleDisplayName</key>         <string>PreviewX</string>
-              <key>CFBundlePackageType</key>         <string>APPL</string>
-              <key>CFBundleShortVersionString</key>  <string>3.1</string>
-              <key>CFBundleVersion</key>             <string>2</string>
-              <key>LSRequiresIPhoneOS</key>          <true/>
-              <key>UIFileSharingEnabled</key>        <true/>
-              <key>LSSupportsOpeningDocumentsInPlace</key> <true/>
-              <key>MinimumOSVersion</key>            <string>16.0</string>
-              <key>UIDeviceFamily</key>
-              <array><integer>1</integer><integer>2</integer></array>
-              <key>UIRequiredDeviceCapabilities</key>
-              <array><string>arm64</string></array>
-              <key>UISupportedInterfaceOrientations</key>
-              <array><string>UIInterfaceOrientationPortrait</string></array>
-              <key>UILaunchScreen</key><dict/>
-              <key>CFBundleLocalizations</key>
-              <array><string>ar</string><string>en</string></array>
-              <key>CFBundleDevelopmentRegion</key>   <string>ar</string>
-          </dict>
-          </plist>
-          PEOF
+          set -euo pipefail
+          mkdir -p /tmp/signing
+          if [ -z "${IPA_BASE64:-}" ]; then
+            echo "::error::IPA_BASE64 secret is empty. Provide the IPA as a base64 secret."
+            exit 1
+          fi
+          echo "$IPA_BASE64" | base64 --decode > /tmp/signing/app.ipa
+          echo "✅ IPA decoded from secret"
 
-      - name: Generate Source - Localization.swift
+      # --------------------------------------------------------------------------
+      # 4. Create a temporary, isolated keychain for this run only.
+      #    Using a dedicated keychain (instead of the login keychain) avoids
+      #    polluting shared runner state and ensures cleanup is reliable.
+      # --------------------------------------------------------------------------
+      - name: Create temporary keychain
+        env:
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          cat > Localization.swift << 'PXEOF'
-          import SwiftUI
-          import Foundation
+          set -euo pipefail
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_NAME"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          echo "✅ Temporary keychain created and unlocked"
 
-          enum AppLanguage: String, CaseIterable, Identifiable {
-              case ar, en
-              var id: String { rawValue }
-              var displayName: String { self == .ar ? "العربية" : "English" }
-              var layoutDirection: LayoutDirection { self == .ar ? .rightToLeft : .leftToRight }
-          }
-
-          final class LocalizationManager: ObservableObject {
-              static let shared = LocalizationManager()
-              @Published var language: AppLanguage = .ar
-
-              private let table: [String: [AppLanguage: String]] = [
-                  "app_title":        [.ar: "بريفيو إكس", .en: "PreviewX"],
-                  "tab_projects":     [.ar: "المشاريع", .en: "Projects"],
-                  "tab_settings":     [.ar: "الإعدادات", .en: "Settings"],
-                  "no_projects":      [.ar: "لا توجد مشاريع بعد. اضغط + لإضافة مشروع Swift جديد", .en: "No projects yet. Tap + to add a new Swift project"],
-                  "add_project":      [.ar: "مشروع Swift جديد", .en: "New Swift Project"],
-                  "project_name":     [.ar: "اسم المشروع", .en: "Project Name"],
-                  "code_content":     [.ar: "الكود", .en: "Code"],
-                  "save":             [.ar: "حفظ", .en: "Save"],
-                  "cancel":           [.ar: "إلغاء", .en: "Cancel"],
-                  "build":            [.ar: "بناء (Build)", .en: "Build"],
-                  "building":         [.ar: "جارِ الفحص...", .en: "Analyzing..."],
-                  "build_results":    [.ar: "نتائج البناء", .en: "Build Results"],
-                  "build_succeeded":  [.ar: "تم البناء بنجاح — لا أخطاء", .en: "Build Succeeded — No Issues"],
-                  "apply_fix":        [.ar: "تطبيق الإصلاح", .en: "Apply Fix"],
-                  "line_label":       [.ar: "سطر", .en: "Line"],
-                  "inspector":        [.ar: "مفتش الملف", .en: "File Inspector"],
-                  "lines":            [.ar: "عدد الأسطر", .en: "Lines"],
-                  "characters":       [.ar: "عدد الأحرف", .en: "Characters"],
-                  "functions":        [.ar: "عدد الدوال", .en: "Functions"],
-                  "created":          [.ar: "تاريخ الإنشاء", .en: "Created"],
-                  "app_language":     [.ar: "لغة التطبيق", .en: "App Language"],
-                  "about":            [.ar: "عن التطبيق", .en: "About"],
-                  "search":           [.ar: "بحث في الكود", .en: "Search in Code"],
-                  "no_matches":       [.ar: "لا نتائج", .en: "No matches"],
-                  "matches":          [.ar: "نتيجة", .en: "matches"],
-                  "share":            [.ar: "مشاركة الملف", .en: "Share File"],
-                  "preview":          [.ar: "معاينة", .en: "Preview"],
-                  "editor":           [.ar: "المحرر", .en: "Editor"],
-                  "about_text":       [.ar: "بريفيو إكس محرر Swift متقدم يعتمد على UITextView الحقيقي لأداء سلس حتى مع ملفات تتجاوز 10,000 سطر، مع تلوين وتحليل يعملان بخيط خلفي منفصل بدون أي تجميد، وإغلاق أقواس ومسافات بادئة تلقائية، وبحث واستبدال، وترقيم أسطر حقيقي، وتراجع/إعادة عبر UndoManager الفعلي، وتغيير حجم الخط، وقوالب كود جاهزة، وإصلاح تلقائي دفعة واحدة للمشاكل القابلة للإصلاح، ونسخ احتياطي واستيراد حقيقي بصيغة JSON عبر منتقي الملفات الرسمي، وتصدير حقيقي للملف. التحليل ساكن (Static Analysis) وليس تنفيذاً فعلياً للكود، لأن iOS لا يسمح بتشغيل كومبايلر داخل تطبيقات الطرف الثالث",
-                                       .en: "PreviewX is an advanced Swift editor built on a real UITextView for smooth performance even beyond 10,000 lines, with highlighting and analysis running on a background thread so the UI never freezes, auto-closing brackets and indentation, search & replace, a real line-number gutter, real UndoManager-backed undo/redo, adjustable font size, insertable code templates, one-tap auto-fix for fixable issues, real JSON backup export/import via the system file picker, and real file export. Analysis is static, not real execution, since iOS blocks running a compiler inside third-party apps"],
-                  "undo":             [.ar: "تراجع", .en: "Undo"],
-                  "redo":             [.ar: "إعادة", .en: "Redo"],
-                  "font_size":        [.ar: "حجم الخط", .en: "Font Size"],
-                  "templates":        [.ar: "قوالب جاهزة", .en: "Templates"],
-                  "tpl_view":         [.ar: "SwiftUI View", .en: "SwiftUI View"],
-                  "tpl_struct":       [.ar: "Struct", .en: "Struct"],
-                  "tpl_class":        [.ar: "Class", .en: "Class"],
-                  "tpl_function":     [.ar: "Function", .en: "Function"],
-                  "fix_all":          [.ar: "إصلاح الكل تلقائيًا", .en: "Auto-Fix All"],
-                  "fixed_count":      [.ar: "تم إصلاح", .en: "Fixed"],
-                  "issues_word":      [.ar: "مشكلة", .en: "issue(s)"],
-                  "rename":           [.ar: "إعادة تسمية", .en: "Rename"],
-                  "duplicate":        [.ar: "نسخ المشروع", .en: "Duplicate"],
-                  "delete":           [.ar: "حذف", .en: "Delete"],
-                  "new_name":         [.ar: "الاسم الجديد", .en: "New Name"],
-                  "backup_export":    [.ar: "تصدير نسخة احتياطية", .en: "Export Backup"],
-                  "backup_import":    [.ar: "استيراد نسخة احتياطية", .en: "Import Backup"],
-                  "import_success":   [.ar: "تم الاستيراد بنجاح", .en: "Import Successful"],
-                  "import_failed":    [.ar: "فشل الاستيراد — ملف غير صالح", .en: "Import Failed — Invalid File"],
-                  "info_notes":       [.ar: "ملاحظات (TODO)", .en: "Notes (TODO)"],
-                  "replace":          [.ar: "استبدال", .en: "Replace"],
-                  "replace_all":      [.ar: "استبدال الكل", .en: "Replace All"],
-                  "replace_with":     [.ar: "استبدال بـ", .en: "Replace with"],
-                  "sort_by":          [.ar: "ترتيب حسب", .en: "Sort by"],
-                  "sort_name":        [.ar: "الاسم", .en: "Name"],
-                  "sort_date":        [.ar: "التاريخ", .en: "Date"],
-                  "sort_size":        [.ar: "الحجم", .en: "Size"],
-              ]
-
-              func t(_ key: String) -> String {
-                  table[key]?[language] ?? key
-              }
-          }
-          PXEOF
-
-      - name: Generate Source - Models.swift
+      # --------------------------------------------------------------------------
+      # 5. Decode and import the signing certificate (.p12) from a base64 secret.
+      #    Never echo the certificate or its password to logs.
+      # --------------------------------------------------------------------------
+      - name: Import signing certificate
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          cat > Models.swift << 'PXEOF'
-          import SwiftUI
-          import Foundation
+          set -euo pipefail
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          echo "$CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
 
-          struct CodeProject: Identifiable, Codable, Equatable {
-              var id: UUID = UUID()
-              var name: String
-              var code: String
-              var createdAt: Date = Date()
-          }
+          security import "$CERT_PATH" \
+            -k "$KEYCHAIN_NAME" \
+            -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
 
-          final class ProjectsStore: ObservableObject {
-              @Published var projects: [CodeProject] = []
-              private let fileURL: URL
+          # Allow codesign to use the key without a UI prompt during CI
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME" >/dev/null
 
-              init() {
-                  let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                  fileURL = dir.appendingPathComponent("previewx_swift_projects.json")
-                  load()
-              }
+          rm -f "$CERT_PATH"
+          echo "✅ Certificate imported into temporary keychain"
 
-              func load() {
-                  guard let data = try? Data(contentsOf: fileURL),
-                        let decoded = try? JSONDecoder().decode([CodeProject].self, from: data) else { return }
-                  projects = decoded
-              }
-
-              func save() {
-                  guard let data = try? JSONEncoder().encode(projects) else { return }
-                  try? data.write(to: fileURL, options: .atomic)
-              }
-
-              func add(_ project: CodeProject) {
-                  projects.insert(project, at: 0)
-                  save()
-              }
-
-              func update(_ project: CodeProject) {
-                  guard let idx = projects.firstIndex(where: { $0.id == project.id }) else { return }
-                  projects[idx] = project
-                  save()
-              }
-
-              func delete(at offsets: IndexSet) {
-                  projects.remove(atOffsets: offsets)
-                  save()
-              }
-
-              func duplicate(_ project: CodeProject) {
-                  var copy = project
-                  copy.id = UUID()
-                  copy.name = project.name + " copy"
-                  copy.createdAt = Date()
-                  if let idx = projects.firstIndex(where: { $0.id == project.id }) {
-                      projects.insert(copy, at: idx + 1)
-                  } else {
-                      projects.insert(copy, at: 0)
-                  }
-                  save()
-              }
-
-              func rename(_ project: CodeProject, to newName: String) {
-                  guard let idx = projects.firstIndex(where: { $0.id == project.id }) else { return }
-                  let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-                  guard !trimmed.isEmpty else { return }
-                  projects[idx].name = trimmed
-                  save()
-              }
-
-              enum SortOption: String, CaseIterable, Identifiable {
-                  case name, date, size
-                  var id: String { rawValue }
-              }
-
-              func sort(by option: SortOption) {
-                  switch option {
-                  case .name: projects.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-                  case .date: projects.sort { $0.createdAt > $1.createdAt }
-                  case .size: projects.sort { $0.code.count > $1.code.count }
-                  }
-                  save()
-              }
-
-              // MARK: - Real JSON backup export / import (actual file I/O, no simulation)
-              func exportBackupData() -> Data? {
-                  let encoder = JSONEncoder()
-                  encoder.dateEncodingStrategy = .iso8601
-                  encoder.outputFormatting = .prettyPrinted
-                  return try? encoder.encode(projects)
-              }
-
-              @discardableResult
-              func importBackup(from data: Data) -> Int {
-                  let decoder = JSONDecoder()
-                  decoder.dateDecodingStrategy = .iso8601
-                  guard let imported = try? decoder.decode([CodeProject].self, from: data) else { return 0 }
-                  let existingIDs = Set(projects.map { $0.id })
-                  var added = 0
-                  for item in imported where !existingIDs.contains(item.id) {
-                      projects.append(item)
-                      added += 1
-                  }
-                  save()
-                  return added
-              }
-          }
-          PXEOF
-
-      - name: Generate Source - SwiftLexer.swift
+      # --------------------------------------------------------------------------
+      # 6. Make the temporary keychain part of the search list so codesign can
+      #    find the identity, while keeping the login keychain available too.
+      # --------------------------------------------------------------------------
+      - name: Configure keychain search list
         run: |
-          cat > SwiftLexer.swift << 'PXEOF'
-          import Foundation
+          set -euo pipefail
+          EXISTING=$(security list-keychains -d user | sed 's/"//g')
+          security list-keychains -d user -s "$KEYCHAIN_NAME" $EXISTING
+          security default-keychain -s "$KEYCHAIN_NAME"
+          echo "✅ Keychain search list configured"
 
-          enum TokenKind {
-              case keyword, type, identifier, string, number, comment, attribute, punctuation
-          }
-
-          struct Token {
-              let kind: TokenKind
-              let text: String
-              let line: Int
-              let range: Range<String.Index>
-          }
-
-          // Real single-pass Swift tokenizer, O(n) regardless of file size
-          enum SwiftLexer {
-              static let keywords: Set<String> = [
-                  "func","var","let","if","else","for","while","struct","class","enum","protocol",
-                  "import","return","guard","switch","case","default","private","public","internal",
-                  "fileprivate","extension","init","self","true","false","nil","break","continue",
-                  "in","is","as","try","catch","throw","throws","rethrows","do","repeat","where",
-                  "typealias","associatedtype","static","final","override","mutating","lazy","weak",
-                  "unowned","inout","some","any","async","await","actor","willSet","didSet","get","set"
-              ]
-
-              static let types: Set<String> = [
-                  "String","Int","Double","Float","Bool","Array","Dictionary","Set","Optional","Void",
-                  "Any","AnyObject","Character","UInt","Int8","Int16","Int32","Int64","CGFloat","Data",
-                  "URL","Date","View","Text","VStack","HStack","ZStack","Image","Button"
-              ]
-
-              static func tokenize(_ code: String) -> [Token] {
-                  var tokens: [Token] = []
-                  tokens.reserveCapacity(code.count / 4)
-                  var i = code.startIndex
-                  let end = code.endIndex
-                  var line = 1
-
-                  while i < end {
-                      let c = code[i]
-                      if c == "\n" { line += 1; i = code.index(after: i); continue }
-                      if c.isWhitespace { i = code.index(after: i); continue }
-
-                      if c == "/", code.index(after: i) < end, code[code.index(after: i)] == "/" {
-                          let start = i
-                          while i < end && code[i] != "\n" { i = code.index(after: i) }
-                          tokens.append(Token(kind: .comment, text: String(code[start..<i]), line: line, range: start..<i))
-                          continue
-                      }
-                      if c == "/", code.index(after: i) < end, code[code.index(after: i)] == "*" {
-                          let start = i
-                          i = code.index(i, offsetBy: 2, limitedBy: end) ?? end
-                          while i < end {
-                              if code[i] == "*", code.index(after: i) < end, code[code.index(after: i)] == "/" {
-                                  i = code.index(i, offsetBy: 2, limitedBy: end) ?? end
-                                  break
-                              }
-                              if code[i] == "\n" { line += 1 }
-                              i = code.index(after: i)
-                          }
-                          tokens.append(Token(kind: .comment, text: String(code[start..<i]), line: line, range: start..<i))
-                          continue
-                      }
-                      if c == "\"" {
-                          let start = i
-                          i = code.index(after: i)
-                          while i < end && code[i] != "\"" {
-                              if code[i] == "\\" {
-                                  i = code.index(i, offsetBy: 1, limitedBy: end) ?? end
-                                  if i >= end { break }
-                              }
-                              if i < end && code[i] == "\n" { line += 1 }
-                              i = code.index(after: i)
-                          }
-                          if i < end { i = code.index(after: i) }
-                          tokens.append(Token(kind: .string, text: String(code[start..<i]), line: line, range: start..<i))
-                          continue
-                      }
-                      if c.isNumber {
-                          let start = i
-                          while i < end && (code[i].isNumber || code[i] == ".") { i = code.index(after: i) }
-                          tokens.append(Token(kind: .number, text: String(code[start..<i]), line: line, range: start..<i))
-                          continue
-                      }
-                      if c.isLetter || c == "_" {
-                          let start = i
-                          while i < end && (code[i].isLetter || code[i].isNumber || code[i] == "_") { i = code.index(after: i) }
-                          let word = String(code[start..<i])
-                          let kind: TokenKind = keywords.contains(word) ? .keyword : (types.contains(word) ? .type : .identifier)
-                          tokens.append(Token(kind: kind, text: word, line: line, range: start..<i))
-                          continue
-                      }
-                      if c == "@" {
-                          let start = i
-                          i = code.index(after: i)
-                          while i < end && code[i].isLetter { i = code.index(after: i) }
-                          tokens.append(Token(kind: .attribute, text: String(code[start..<i]), line: line, range: start..<i))
-                          continue
-                      }
-                      let start = i
-                      i = code.index(after: i)
-                      tokens.append(Token(kind: .punctuation, text: String(code[start..<i]), line: line, range: start..<i))
-                  }
-                  return tokens
-              }
-
-              // Locates the character range of a given 1-based line number, O(n) single scan
-              static func nsRange(forLine lineNumber: Int, in text: String) -> NSRange? {
-                  let ns = text as NSString
-                  var current = 1
-                  var idx = 0
-                  while idx < ns.length {
-                      let lineRange = ns.lineRange(for: NSRange(location: idx, length: 0))
-                      if current == lineNumber { return lineRange }
-                      idx = NSMaxRange(lineRange)
-                      current += 1
-                      if lineRange.length == 0 { break }
-                  }
-                  return nil
-              }
-          }
-          PXEOF
-
-      - name: Generate Source - SwiftHighlighter.swift
+      # --------------------------------------------------------------------------
+      # 7. Install the provisioning profile into the correct directory so both
+      #    codesign and Xcode tooling can discover it.
+      # --------------------------------------------------------------------------
+      - name: Install provisioning profile
+        env:
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
         run: |
-          cat > SwiftHighlighter.swift << 'PXEOF'
-          import SwiftUI
-          import UIKit
+          set -euo pipefail
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILE_DIR"
 
-          // Builds a real NSAttributedString for UITextView - far cheaper at scale
-          // than SwiftUI's AttributedString range mutation, and runs off-main via caller.
-          enum SwiftHighlighter {
-              static func buildNSAttributed(_ code: String, tokens: [Token]) -> NSAttributedString {
-                  let attr = NSMutableAttributedString(string: code)
-                  let ns = code as NSString
-                  let fullRange = NSRange(location: 0, length: ns.length)
-                  attr.addAttribute(.font, value: UIFont.monospacedSystemFont(ofSize: 13, weight: .regular), range: fullRange)
-                  attr.addAttribute(.foregroundColor, value: UIColor(white: 0.85, alpha: 1), range: fullRange)
+          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
+          echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
 
-                  for t in tokens {
-                      let converted = NSRange(t.range, in: code)
-                      guard converted.location != NSNotFound, NSMaxRange(converted) <= ns.length else { continue }
-                      attr.addAttribute(.foregroundColor, value: uiColor(for: t.kind), range: converted)
-                      if t.kind == .keyword {
-                          attr.addAttribute(.font, value: UIFont.monospacedSystemFont(ofSize: 13, weight: .semibold), range: converted)
-                      }
-                  }
-                  return attr
-              }
+          # Extract the profile UUID so we can name the file correctly and
+          # reference it later for entitlements extraction / cleanup.
+          UUID=$(security cms -D -i "$PROFILE_PATH" 2>/dev/null | \
+                 /usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin)
 
-              static func uiColor(for kind: TokenKind) -> UIColor {
-                  switch kind {
-                  case .keyword:     return UIColor(red: 1.00, green: 0.35, blue: 0.55, alpha: 1)
-                  case .type:        return UIColor(red: 0.30, green: 0.85, blue: 0.75, alpha: 1)
-                  case .string:      return UIColor(red: 1.00, green: 0.50, blue: 0.40, alpha: 1)
-                  case .number:      return UIColor(red: 0.70, green: 0.55, blue: 1.00, alpha: 1)
-                  case .comment:     return UIColor(red: 0.40, green: 0.75, blue: 0.40, alpha: 1)
-                  case .attribute:   return UIColor(red: 1.00, green: 0.60, blue: 0.20, alpha: 1)
-                  case .identifier:  return UIColor(white: 0.90, alpha: 1)
-                  case .punctuation: return UIColor(white: 0.65, alpha: 1)
-                  }
-              }
-          }
-          PXEOF
+          if [ -z "$UUID" ]; then
+            echo "::error::Could not read UUID from provisioning profile"
+            exit 1
+          fi
 
-      - name: Generate Source - SwiftAnalyzer.swift
+          cp "$PROFILE_PATH" "$PROFILE_DIR/$UUID.mobileprovision"
+          echo "$UUID" > "$PROFILE_UUID_FILE"
+          rm -f "$PROFILE_PATH"
+          echo "✅ Provisioning profile installed (UUID: $UUID)"
+
+      # --------------------------------------------------------------------------
+      # 8. Validate that both the certificate and the provisioning profile are
+      #    correctly installed before attempting to sign anything.
+      # --------------------------------------------------------------------------
+      - name: Validate certificate and profile
         run: |
-          cat > SwiftAnalyzer.swift << 'PXEOF'
-          import Foundation
+          set -euo pipefail
 
-          enum Severity { case error, warning, info }
+          echo "Available signing identities:"
+          IDENTITY_COUNT=$(security find-identity -v -p codesigning "$KEYCHAIN_NAME" | grep -c "valid identities found" || true)
+          security find-identity -v -p codesigning "$KEYCHAIN_NAME"
 
-          struct Diagnostic: Identifiable {
-              let id = UUID()
-              let line: Int
-              let message: String
-              let severity: Severity
-              var badToken: String? = nil
-              var suggestion: String? = nil
-              var autoFixable: Bool { badToken != nil && suggestion != nil }
-          }
+          if ! security find-identity -v -p codesigning "$KEYCHAIN_NAME" | grep -q "1)"; then
+            echo "::error::No valid codesigning identity found in keychain"
+            exit 1
+          fi
 
-          // Static analyzer - all O(n) single/limited passes, safe for large files
-          enum SwiftAnalyzer {
+          UUID=$(cat "$PROFILE_UUID_FILE")
+          PROFILE_FILE="$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
+          if [ ! -f "$PROFILE_FILE" ]; then
+            echo "::error::Provisioning profile file missing after install"
+            exit 1
+          fi
 
-              static func analyze(_ code: String) -> [Diagnostic] {
-                  var diags: [Diagnostic] = []
-                  diags += checkBrackets(code)
-                  diags += checkUnterminatedStrings(code)
-                  diags += checkEmptyFunctions(code)
-                  diags += checkTypos(code)
-                  diags += checkForceUnwraps(code)
-                  diags += checkLongLines(code)
-                  diags += checkTodoMarkers(code)
-                  diags += checkUnusedLocals(code)
-                  return diags.sorted { $0.line < $1.line }
-              }
+          echo "✅ Certificate and provisioning profile validated"
 
-              // Flags force-unwraps ('!') that risk a runtime crash, excluding '!=' comparisons
-              static func checkForceUnwraps(_ code: String) -> [Diagnostic] {
-                  var diags: [Diagnostic] = []
-                  guard let regex = try? NSRegularExpression(pattern: "[A-Za-z0-9_\\)\\]]!(?!=)") else { return diags }
-                  let ns = code as NSString
-                  let matches = regex.matches(in: code, range: NSRange(location: 0, length: ns.length))
-                  for m in matches {
-                      let prefix = ns.substring(to: m.range.location)
-                      let lineNum = prefix.components(separatedBy: "\n").count
-                      diags.append(Diagnostic(line: lineNum, message: "استخدام '!' للفك القسري قد يسبب انهيار التطبيق — يفضل if let / guard let", severity: .warning))
-                  }
-                  return diags
-              }
-
-              // Flags overly long lines (readability / style)
-              static func checkLongLines(_ code: String) -> [Diagnostic] {
-                  var diags: [Diagnostic] = []
-                  let lines = code.components(separatedBy: "\n")
-                  for (idx, line) in lines.enumerated() where line.count > 120 {
-                      diags.append(Diagnostic(line: idx + 1, message: "السطر طويل جدًا (\(line.count) حرف) — يفضل تقسيمه", severity: .warning))
-                  }
-                  return diags
-              }
-
-              // Surfaces TODO / FIXME markers as informational notes for quick navigation
-              static func checkTodoMarkers(_ code: String) -> [Diagnostic] {
-                  var diags: [Diagnostic] = []
-                  guard let regex = try? NSRegularExpression(pattern: "//\\s*(TODO|FIXME)[:\\s]?(.*)") else { return diags }
-                  let ns = code as NSString
-                  let matches = regex.matches(in: code, range: NSRange(location: 0, length: ns.length))
-                  for m in matches {
-                      let prefix = ns.substring(to: m.range.location)
-                      let lineNum = prefix.components(separatedBy: "\n").count
-                      let note = m.range(at: 2).location != NSNotFound ? ns.substring(with: m.range(at: 2)).trimmingCharacters(in: .whitespaces) : ""
-                      diags.append(Diagnostic(line: lineNum, message: note.isEmpty ? "ملاحظة TODO/FIXME" : note, severity: .info))
-                  }
-                  return diags
-              }
-
-              // Heuristic unused-local-variable detector: 'let x = ...' / 'var x = ...' whose
-              // name never appears again in the file. Intentionally conservative (single scope pass).
-              static func checkUnusedLocals(_ code: String) -> [Diagnostic] {
-                  var diags: [Diagnostic] = []
-                  guard let regex = try? NSRegularExpression(pattern: "\\b(?:let|var)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*[:=]") else { return diags }
-                  let ns = code as NSString
-                  let matches = regex.matches(in: code, range: NSRange(location: 0, length: ns.length))
-                  var declLine: [String: Int] = [:]
-                  for m in matches {
-                      guard m.range(at: 1).location != NSNotFound else { continue }
-                      let name = ns.substring(with: m.range(at: 1))
-                      if name == "_" || name.count < 2 { continue }
-                      let prefix = ns.substring(to: m.range.location)
-                      let lineNum = prefix.components(separatedBy: "\n").count
-                      if declLine[name] == nil { declLine[name] = lineNum }
-                  }
-                  // Count every real identifier occurrence (declaration included) via the lexer
-                  var occurrences: [String: Int] = [:]
-                  let tokens = SwiftLexer.tokenize(code)
-                  for t in tokens where t.kind == .identifier {
-                      occurrences[t.text, default: 0] += 1
-                  }
-                  for (name, line) in declLine where (occurrences[name] ?? 0) <= 1 {
-                      diags.append(Diagnostic(line: line, message: "المتغير '\(name)' معلن ولم يُستخدم", severity: .warning))
-                  }
-                  return diags
-              }
-
-              static func checkBrackets(_ code: String) -> [Diagnostic] {
-                  var stack: [(Character, Int)] = []
-                  var diags: [Diagnostic] = []
-                  var line = 1
-                  let pairs: [Character: Character] = ["(": ")", "{": "}", "[": "]"]
-                  let closers: Set<Character> = [")", "}", "]"]
-                  for c in code {
-                      if c == "\n" { line += 1; continue }
-                      if pairs[c] != nil {
-                          stack.append((c, line))
-                      } else if closers.contains(c) {
-                          if let last = stack.last, pairs[last.0] == c {
-                              stack.removeLast()
-                          } else {
-                              diags.append(Diagnostic(line: line, message: "قوس إغلاق غير متوقع '\(c)'", severity: .error))
-                          }
-                      }
-                  }
-                  for (open, ln) in stack {
-                      diags.append(Diagnostic(line: ln, message: "قوس فتح '\(open)' بدون إغلاق مطابق", severity: .error))
-                  }
-                  return diags
-              }
-
-              static func checkUnterminatedStrings(_ code: String) -> [Diagnostic] {
-                  var diags: [Diagnostic] = []
-                  var line = 1
-                  var inString = false
-                  var startLine = 0
-                  var prevChar: Character? = nil
-                  for c in code {
-                      if c == "\n" { line += 1 }
-                      if c == "\"" && prevChar != "\\" {
-                          if !inString { inString = true; startLine = line } else { inString = false }
-                      }
-                      prevChar = c
-                  }
-                  if inString {
-                      diags.append(Diagnostic(line: startLine, message: "نص (String) غير مغلق بعلامة اقتباس مطابقة", severity: .error))
-                  }
-                  return diags
-              }
-
-              static func checkEmptyFunctions(_ code: String) -> [Diagnostic] {
-                  var diags: [Diagnostic] = []
-                  guard let regex = try? NSRegularExpression(pattern: "func\\s+\\w+\\s*\\([^)]*\\)[^{]*\\{\\s*\\}") else { return diags }
-                  let ns = code as NSString
-                  let matches = regex.matches(in: code, range: NSRange(location: 0, length: ns.length))
-                  for m in matches {
-                      let prefix = ns.substring(to: m.range.location)
-                      let lineNum = prefix.components(separatedBy: "\n").count
-                      diags.append(Diagnostic(line: lineNum, message: "دالة فارغة بدون أي تنفيذ داخلها", severity: .warning))
-                  }
-                  return diags
-              }
-
-              static func levenshtein(_ a: String, _ b: String) -> Int {
-                  let aC = Array(a), bC = Array(b)
-                  if aC.isEmpty { return bC.count }
-                  if bC.isEmpty { return aC.count }
-                  var dp = Array(repeating: Array(repeating: 0, count: bC.count + 1), count: aC.count + 1)
-                  for i in 0...aC.count { dp[i][0] = i }
-                  for j in 0...bC.count { dp[0][j] = j }
-                  for i in 1...aC.count {
-                      for j in 1...bC.count {
-                          if aC[i-1] == bC[j-1] {
-                              dp[i][j] = dp[i-1][j-1]
-                          } else {
-                              dp[i][j] = 1 + min(dp[i-1][j], min(dp[i][j-1], dp[i-1][j-1]))
-                          }
-                      }
-                  }
-                  return dp[aC.count][bC.count]
-              }
-
-              static func checkTypos(_ code: String) -> [Diagnostic] {
-                  var diags: [Diagnostic] = []
-                  let tokens = SwiftLexer.tokenize(code)
-                  for t in tokens where t.kind == .identifier && t.text.count >= 3 {
-                      var bestMatch: String? = nil
-                      var bestDist = Int.max
-                      for kw in SwiftLexer.keywords {
-                          guard abs(kw.count - t.text.count) <= 1 else { continue }
-                          let d = levenshtein(t.text.lowercased(), kw.lowercased())
-                          if d < bestDist { bestDist = d; bestMatch = kw }
-                      }
-                      if let match = bestMatch, bestDist == 1, match != t.text {
-                          diags.append(Diagnostic(line: t.line, message: "ربما تقصد '\(match)' بدلاً من '\(t.text)'؟", severity: .warning, badToken: t.text, suggestion: match))
-                      }
-                  }
-                  return diags
-              }
-
-              static func lineCount(_ code: String) -> Int {
-                  code.isEmpty ? 0 : code.components(separatedBy: .newlines).count
-              }
-
-              static func functionCount(_ code: String) -> Int {
-                  code.components(separatedBy: "func ").count - 1
-              }
-
-              static func applyFix(_ diag: Diagnostic, to code: String) -> String {
-                  guard let bad = diag.badToken, let fix = diag.suggestion else { return code }
-                  var lines = code.components(separatedBy: "\n")
-                  guard diag.line - 1 < lines.count, diag.line - 1 >= 0 else { return code }
-                  if let range = lines[diag.line - 1].range(of: bad) {
-                      lines[diag.line - 1].replaceSubrange(range, with: fix)
-                  }
-                  return lines.joined(separator: "\n")
-              }
-
-              // Real automatic batch-fix: applies every diagnostic that carries a concrete
-              // suggestion (currently the typo detector), re-analyzing between passes since
-              // fixing one line can shift/resolve others. Returns the corrected code + count fixed.
-              static func fixAll(_ code: String, maxPasses: Int = 5) -> (code: String, fixedCount: Int) {
-                  var current = code
-                  var totalFixed = 0
-                  for _ in 0..<maxPasses {
-                      let diags = analyze(current).filter { $0.autoFixable }
-                      if diags.isEmpty { break }
-                      for d in diags { current = applyFix(d, to: current) }
-                      totalFixed += diags.count
-                  }
-                  return (current, totalFixed)
-              }
-          }
-          PXEOF
-
-      - name: Generate Source - Templates.swift
+      # --------------------------------------------------------------------------
+      # 9. Unpack the IPA, extract entitlements from the existing app binary
+      #    (so we preserve capabilities like push notifications, app groups,
+      #    keychain sharing, etc.), then re-sign with the new identity/profile.
+      # --------------------------------------------------------------------------
+      - name: Extract IPA and entitlements
+        id: extract
         run: |
-          cat > Templates.swift << 'PXEOF'
-          import Foundation
+          set -euo pipefail
+          WORKDIR="/tmp/signing/payload"
+          mkdir -p "$WORKDIR"
+          cd "$WORKDIR"
+          unzip -q /tmp/signing/app.ipa
 
-          // Real, insertable Swift boilerplate. Inserted at the live cursor position via
-          // EditorActions.insertAtCursor, using the UITextView's actual insertText(_:) API.
-          enum Templates {
-              static let swiftUIView = """
+          APP_PATH=$(find Payload -maxdepth 1 -name "*.app" | head -n1)
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::No .app bundle found inside IPA Payload/"
+            exit 1
+          fi
+          echo "app_path=$WORKDIR/$APP_PATH" >> "$GITHUB_OUTPUT"
 
-              struct NewView: View {
-                  var body: some View {
-                      Text("Hello")
-                  }
-              }
+          BINARY_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP_PATH/Info.plist")
+          codesign -d --entitlements :/tmp/signing/entitlements.plist "$APP_PATH/$BINARY_NAME" 2>/dev/null || true
 
-              """
+          if [ -f /tmp/signing/entitlements.plist ] && [ -s /tmp/signing/entitlements.plist ]; then
+            echo "✅ Existing entitlements extracted and will be preserved"
+          else
+            echo "ℹ️ No existing entitlements found; signing without an entitlements override"
+          fi
 
-              static let structTemplate = """
-
-              struct NewStruct {
-                  var property: String
-              }
-
-              """
-
-              static let classTemplate = """
-
-              final class NewClass {
-                  init() {
-
-                  }
-              }
-
-              """
-
-              static let functionTemplate = """
-
-              func newFunction() {
-
-              }
-
-              """
-          }
-          PXEOF
-
-      - name: Generate Source - CodeEditorView.swift
+      - name: Replace embedded provisioning profile
         run: |
-          cat > CodeEditorView.swift << 'PXEOF'
-          import SwiftUI
-          import UIKit
+          set -euo pipefail
+          APP_PATH="${{ steps.extract.outputs.app_path }}"
+          UUID=$(cat "$PROFILE_UUID_FILE")
+          cp "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision" \
+             "$APP_PATH/embedded.mobileprovision"
+          echo "✅ Embedded provisioning profile replaced"
 
-          // Real controller exposing the underlying UITextView's actual UndoManager and
-          // cursor-relative text insertion, so Undo/Redo/Templates operate on genuine
-          // UIKit text-editing state rather than a simulated stack.
-          final class EditorActions: ObservableObject {
-              weak var textView: UITextView?
-
-              var canUndo: Bool { textView?.undoManager?.canUndo ?? false }
-              var canRedo: Bool { textView?.undoManager?.canRedo ?? false }
-
-              func undo() { textView?.undoManager?.undo() }
-              func redo() { textView?.undoManager?.redo() }
-
-              func insertAtCursor(_ snippet: String) {
-                  guard let tv = textView else { return }
-                  tv.becomeFirstResponder()
-                  tv.insertText(snippet)
-              }
-
-              func setFontSize(_ size: CGFloat) {
-                  guard let tv = textView else { return }
-                  tv.font = UIFont.monospacedSystemFont(ofSize: size, weight: .regular)
-              }
-          }
-
-          // Real line-number gutter drawn from the text view's own NSLayoutManager,
-          // so numbers always match the actual wrapped line fragments on screen.
-          final class LineNumberGutterView: UIView {
-              weak var textView: UITextView?
-
-              override func draw(_ rect: CGRect) {
-                  guard let tv = textView, let layoutManager = tv.layoutManager as NSLayoutManager? else { return }
-                  let textContainer = tv.textContainer
-                  let visibleRect = CGRect(origin: tv.contentOffset, size: tv.bounds.size)
-                  let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
-                  let text = tv.text as NSString? ?? ""
-                  var lineNumber = 1
-                  if glyphRange.location > 0 {
-                      let charIndexAtStart = layoutManager.characterIndexForGlyph(at: glyphRange.location)
-                      lineNumber = text.substring(to: min(charIndexAtStart, text.length)).components(separatedBy: "\n").count
-                  }
-                  let paragraphStyle: [NSAttributedString.Key: Any] = [
-                      .font: UIFont.monospacedSystemFont(ofSize: 11, weight: .regular),
-                      .foregroundColor: UIColor(white: 0.45, alpha: 1)
-                  ]
-                  layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { rectF, _, _, effectiveRange, _ in
-                      let charIndex = layoutManager.characterIndexForGlyph(at: effectiveRange.location)
-                      let isRealLineStart = charIndex == 0 || (charIndex > 0 && text.character(at: charIndex - 1) == 10)
-                      if isRealLineStart {
-                          let y = rectF.minY - tv.contentOffset.y + tv.textContainerInset.top
-                          let label = "\(lineNumber)" as NSString
-                          label.draw(at: CGPoint(x: self.bounds.width - label.size(withAttributes: paragraphStyle).width - 4, y: y), withAttributes: paragraphStyle)
-                          lineNumber += 1
-                      }
-                  }
-              }
-          }
-
-          // High-performance code editor backed by a real UITextView.
-          // Highlighting runs debounced + off the main thread so typing never lags,
-          // even on files well beyond 10,000 lines.
-          final class HighlightingTextView: UITextView, UITextViewDelegate {
-              var onTextChange: ((String) -> Void)?
-              private var debounceWorkItem: DispatchWorkItem?
-              let gutter = LineNumberGutterView()
-              var showsGutter = true
-
-              func configure() {
-                  delegate = self
-                  backgroundColor = UIColor(red: 0.09, green: 0.09, blue: 0.13, alpha: 1)
-                  autocorrectionType = .no
-                  autocapitalizationType = .none
-                  smartQuotesType = .no
-                  smartDashesType = .no
-                  smartInsertDeleteType = .no
-                  textContainerInset = UIEdgeInsets(top: 10, left: showsGutter ? 34 : 6, bottom: 10, right: 6)
-                  font = UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-                  textColor = UIColor(white: 0.85, alpha: 1)
-                  gutter.backgroundColor = .clear
-                  gutter.isUserInteractionEnabled = false
-                  gutter.textView = self
-                  addSubview(gutter)
-              }
-
-              override func layoutSubviews() {
-                  super.layoutSubviews()
-                  gutter.frame = CGRect(x: contentOffset.x, y: contentOffset.y, width: 30, height: bounds.height)
-                  gutter.setNeedsDisplay()
-              }
-
-              override var contentOffset: CGPoint {
-                  get { super.contentOffset }
-                  set {
-                      super.contentOffset = newValue
-                      gutter.frame = CGRect(x: newValue.x, y: newValue.y, width: 30, height: bounds.height)
-                      gutter.setNeedsDisplay()
-                  }
-              }
-
-              func scheduleHighlight() {
-                  debounceWorkItem?.cancel()
-                  let item = DispatchWorkItem { [weak self] in self?.applyHighlighting() }
-                  debounceWorkItem = item
-                  DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: item)
-              }
-
-              func applyHighlighting() {
-                  let snapshot = self.text ?? ""
-                  DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                      let tokens = SwiftLexer.tokenize(snapshot)
-                      let attributed = SwiftHighlighter.buildNSAttributed(snapshot, tokens: tokens)
-                      DispatchQueue.main.async {
-                          guard let self = self, self.text == snapshot else { return }
-                          let saved = self.selectedRange
-                          self.attributedText = attributed
-                          if saved.location <= (self.text as NSString).length {
-                              self.selectedRange = saved
-                          }
-                          self.gutter.setNeedsDisplay()
-                      }
-                  }
-              }
-
-              func jump(to range: NSRange) {
-                  selectedRange = range
-                  scrollRangeToVisible(range)
-                  becomeFirstResponder()
-              }
-
-              func textViewDidChange(_ textView: UITextView) {
-                  onTextChange?(textView.text)
-                  scheduleHighlight()
-              }
-
-              // Auto-close brackets/quotes, auto-indent new lines
-              func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
-                  if text == "\n" {
-                      let ns = textView.text as NSString
-                      let safeLoc = max(0, min(range.location, ns.length))
-                      let lineRange = ns.lineRange(for: NSRange(location: safeLoc, length: 0))
-                      let currentLine = ns.substring(with: lineRange)
-                      let indent = currentLine.prefix(while: { $0 == " " })
-                      var newIndent = String(indent)
-                      if currentLine.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("{") {
-                          newIndent += "    "
-                      }
-                      textView.insertText("\n" + newIndent)
-                      return false
-                  }
-                  let pairs: [String: String] = ["(": ")", "[": "]", "\"": "\""]
-                  if let close = pairs[text] {
-                      textView.insertText(text + close)
-                      if let start = textView.selectedTextRange?.start,
-                         let newStart = textView.position(from: start, offset: -1) {
-                          textView.selectedTextRange = textView.textRange(from: newStart, to: newStart)
-                      }
-                      return false
-                  }
-                  if text == "{" {
-                      textView.insertText("{}")
-                      if let start = textView.selectedTextRange?.start,
-                         let newStart = textView.position(from: start, offset: -1) {
-                          textView.selectedTextRange = textView.textRange(from: newStart, to: newStart)
-                      }
-                      return false
-                  }
-                  return true
-              }
-          }
-
-          struct CodeEditorView: UIViewRepresentable {
-              @Binding var text: String
-              var isEditable: Bool = true
-              @Binding var scrollToRange: NSRange?
-              var actions: EditorActions? = nil
-              var fontSize: CGFloat = 13
-
-              func makeUIView(context: Context) -> HighlightingTextView {
-                  let tv = HighlightingTextView()
-                  tv.configure()
-                  tv.isEditable = isEditable
-                  tv.text = text
-                  tv.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-                  tv.onTextChange = { newText in
-                      if self.text != newText { self.text = newText }
-                  }
-                  tv.applyHighlighting()
-                  actions?.textView = tv
-                  return tv
-              }
-
-              func updateUIView(_ uiView: HighlightingTextView, context: Context) {
-                  if uiView.text != text {
-                      uiView.text = text
-                      uiView.applyHighlighting()
-                  }
-                  if uiView.font?.pointSize != fontSize {
-                      uiView.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-                      uiView.applyHighlighting()
-                  }
-                  if let range = scrollToRange {
-                      uiView.jump(to: range)
-                      DispatchQueue.main.async { scrollToRange = nil }
-                  }
-                  actions?.textView = uiView
-              }
-          }
-
-          struct ActivityView: UIViewControllerRepresentable {
-              let items: [Any]
-              func makeUIViewController(context: Context) -> UIActivityViewController {
-                  UIActivityViewController(activityItems: items, applicationActivities: nil)
-              }
-              func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-          }
-          PXEOF
-
-      - name: Generate Source - DocumentPicker.swift
+      - name: Re-sign application bundle
+        env:
+          SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
         run: |
-          cat > DocumentPicker.swift << 'PXEOF'
-          import SwiftUI
-          import UniformTypeIdentifiers
+          set -euo pipefail
+          APP_PATH="${{ steps.extract.outputs.app_path }}"
 
-          // Real system document picker (UIDocumentPickerViewController) used to import
-          // an actual JSON backup file selected by the user from Files / iCloud Drive.
-          struct DocumentPicker: UIViewControllerRepresentable {
-              var onPick: (URL) -> Void
+          # Sign any nested frameworks/plugins first, then the main app bundle.
+          find "$APP_PATH" \( -name "*.framework" -o -name "*.appex" -o -name "*.dylib" \) -print0 | \
+            while IFS= read -r -d '' NESTED; do
+              codesign --force --sign "$SIGNING_IDENTITY" --timestamp=none "$NESTED"
+            done
 
-              func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
+          if [ -s /tmp/signing/entitlements.plist ]; then
+            codesign --force --sign "$SIGNING_IDENTITY" \
+              --entitlements /tmp/signing/entitlements.plist \
+              --timestamp=none "$APP_PATH"
+          else
+            codesign --force --sign "$SIGNING_IDENTITY" \
+              --timestamp=none "$APP_PATH"
+          fi
 
-              func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-                  let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.json])
-                  picker.allowsMultipleSelection = false
-                  picker.delegate = context.coordinator
-                  return picker
-              }
+          echo "✅ Application bundle re-signed"
 
-              func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
-
-              final class Coordinator: NSObject, UIDocumentPickerDelegate {
-                  let onPick: (URL) -> Void
-                  init(onPick: @escaping (URL) -> Void) { self.onPick = onPick }
-
-                  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-                      guard let url = urls.first else { return }
-                      let accessed = url.startAccessingSecurityScopedResource()
-                      defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-                      onPick(url)
-                  }
-              }
-          }
-          PXEOF
-
-      - name: Generate Source - PhoneFrameView.swift
+      # --------------------------------------------------------------------------
+      # 10. Verify the new signature is valid before packaging.
+      # --------------------------------------------------------------------------
+      - name: Verify code signature
         run: |
-          cat > PhoneFrameView.swift << 'PXEOF'
-          import SwiftUI
+          set -euo pipefail
+          APP_PATH="${{ steps.extract.outputs.app_path }}"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          echo "✅ Code signature verified"
 
-          struct PhoneFrameView<Content: View>: View {
-              let content: Content
-              init(@ViewBuilder content: () -> Content) { self.content = content() }
-
-              var body: some View {
-                  VStack(spacing: 0) {
-                      Capsule()
-                          .fill(Color.black)
-                          .frame(width: 90, height: 22)
-                          .padding(.top, 8)
-                      content
-                          .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                          .padding(.horizontal, 10)
-                          .padding(.top, 4)
-                          .padding(.bottom, 14)
-                  }
-                  .background(RoundedRectangle(cornerRadius: 34, style: .continuous).fill(Color.black))
-                  .overlay(RoundedRectangle(cornerRadius: 34, style: .continuous).stroke(Color.gray.opacity(0.5), lineWidth: 3))
-                  .frame(width: 250, height: 420)
-                  .shadow(color: .black.opacity(0.35), radius: 18, x: 0, y: 10)
-              }
-          }
-          PXEOF
-
-      - name: Generate Source - BuildResultsView.swift
+      # --------------------------------------------------------------------------
+      # 11. Repackage into an IPA (Payload/ must stay at the zip root).
+      # --------------------------------------------------------------------------
+      - name: Repackage signed IPA
         run: |
-          cat > BuildResultsView.swift << 'PXEOF'
-          import SwiftUI
+          set -euo pipefail
+          cd /tmp/signing/payload
+          OUTPUT_NAME="app-signed.ipa"
+          zip -qr "/tmp/signing/$OUTPUT_NAME" Payload
+          echo "SIGNED_IPA_PATH=/tmp/signing/$OUTPUT_NAME" >> "$GITHUB_ENV"
+          echo "✅ Signed IPA packaged: $OUTPUT_NAME"
 
-          struct BuildResultsView: View {
-              let diagnostics: [Diagnostic]
-              @ObservedObject var loc = LocalizationManager.shared
-              var onApplyFix: (Diagnostic) -> Void
-              var onJump: (Diagnostic) -> Void
-              var onFixAll: () -> Void
-
-              private var errorCount: Int { diagnostics.filter { $0.severity == .error }.count }
-              private var warningCount: Int { diagnostics.filter { $0.severity == .warning }.count }
-              private var infoCount: Int { diagnostics.filter { $0.severity == .info }.count }
-              private var fixableCount: Int { diagnostics.filter { $0.autoFixable }.count }
-
-              private func icon(for s: Severity) -> String {
-                  switch s {
-                  case .error: return "xmark.octagon.fill"
-                  case .warning: return "exclamationmark.triangle.fill"
-                  case .info: return "info.circle.fill"
-                  }
-              }
-              private func color(for s: Severity) -> Color {
-                  switch s {
-                  case .error: return .red
-                  case .warning: return .yellow
-                  case .info: return .blue
-                  }
-              }
-
-              var body: some View {
-                  VStack(alignment: .leading, spacing: 10) {
-                      HStack {
-                          Text(loc.t("build_results")).font(.headline)
-                          Spacer()
-                          if !diagnostics.isEmpty {
-                              Label("\(errorCount)", systemImage: "xmark.octagon.fill").foregroundColor(.red).font(.caption)
-                              Label("\(warningCount)", systemImage: "exclamationmark.triangle.fill").foregroundColor(.yellow).font(.caption)
-                              Label("\(infoCount)", systemImage: "info.circle.fill").foregroundColor(.blue).font(.caption)
-                          }
-                      }
-                      if diagnostics.isEmpty {
-                          Label(loc.t("build_succeeded"), systemImage: "checkmark.circle.fill")
-                              .foregroundColor(.green).font(.subheadline)
-                      } else {
-                          if fixableCount > 0 {
-                              Button {
-                                  onFixAll()
-                              } label: {
-                                  Label("\(loc.t("fix_all")) (\(fixableCount))", systemImage: "wand.and.stars")
-                              }
-                              .font(.caption).buttonStyle(.borderedProminent).tint(.indigo)
-                          }
-                          ForEach(diagnostics) { d in
-                              HStack(alignment: .top, spacing: 8) {
-                                  Image(systemName: icon(for: d.severity))
-                                      .foregroundColor(color(for: d.severity))
-                                  VStack(alignment: .leading, spacing: 4) {
-                                      Text("\(loc.t("line_label")) \(d.line): \(d.message)").font(.caption)
-                                      HStack {
-                                          if d.suggestion != nil {
-                                              Button(loc.t("apply_fix")) { onApplyFix(d) }
-                                                  .font(.caption2).buttonStyle(.bordered)
-                                          }
-                                          Button { onJump(d) } label: {
-                                              Label(loc.t("line_label"), systemImage: "arrow.turn.down.right")
-                                          }
-                                          .font(.caption2).buttonStyle(.bordered)
-                                      }
-                                  }
-                              }
-                          }
-                      }
-                  }
-                  .padding()
-                  .background(RoundedRectangle(cornerRadius: 14).fill(Color(white: 0.12)))
-                  .padding(.horizontal)
-              }
-          }
-          PXEOF
-
-      - name: Generate Source - AddProjectView.swift
+      - name: Zip signed IPA (optional)
+        if: ${{ inputs.zip_output }}
         run: |
-          cat > AddProjectView.swift << 'PXEOF'
-          import SwiftUI
+          set -euo pipefail
+          cd /tmp/signing
+          zip -q app-signed.zip app-signed.ipa
+          echo "SIGNED_ZIP_PATH=/tmp/signing/app-signed.zip" >> "$GITHUB_ENV"
+          echo "✅ Zipped output created"
 
-          struct AddProjectView: View {
-              @ObservedObject var store: ProjectsStore
-              @ObservedObject var loc = LocalizationManager.shared
-              @Environment(\.dismiss) var dismiss
-
-              @State private var name: String = ""
-              @State private var code: String = ""
-              @State private var scrollRange: NSRange? = nil
-              @StateObject private var editorActions = EditorActions()
-              @State private var fontSize: CGFloat = 13
-
-              var body: some View {
-                  NavigationStack {
-                      VStack(spacing: 0) {
-                          TextField(loc.t("project_name"), text: $name)
-                              .textFieldStyle(.roundedBorder)
-                              .padding()
-                          HStack(spacing: 14) {
-                              Button { editorActions.undo() } label: { Image(systemName: "arrow.uturn.backward.circle") }
-                              Button { editorActions.redo() } label: { Image(systemName: "arrow.uturn.forward.circle") }
-                              Divider().frame(height: 18)
-                              Button { fontSize = max(10, fontSize - 1) } label: { Image(systemName: "textformat.size.smaller") }
-                              Text("\(Int(fontSize))").font(.caption).foregroundColor(.gray).frame(width: 20)
-                              Button { fontSize = min(24, fontSize + 1) } label: { Image(systemName: "textformat.size.larger") }
-                              Divider().frame(height: 18)
-                              Menu {
-                                  Button(loc.t("tpl_view")) { editorActions.insertAtCursor(Templates.swiftUIView) }
-                                  Button(loc.t("tpl_struct")) { editorActions.insertAtCursor(Templates.structTemplate) }
-                                  Button(loc.t("tpl_class")) { editorActions.insertAtCursor(Templates.classTemplate) }
-                                  Button(loc.t("tpl_function")) { editorActions.insertAtCursor(Templates.functionTemplate) }
-                              } label: {
-                                  Label(loc.t("templates"), systemImage: "text.badge.plus")
-                              }
-                              Spacer()
-                          }
-                          .font(.subheadline)
-                          .padding(.horizontal)
-                          CodeEditorView(text: $code, isEditable: true, scrollToRange: $scrollRange, actions: editorActions, fontSize: fontSize)
-                      }
-                      .navigationTitle(loc.t("add_project"))
-                      .toolbar {
-                          ToolbarItem(placement: .cancellationAction) { Button(loc.t("cancel")) { dismiss() } }
-                          ToolbarItem(placement: .confirmationAction) {
-                              Button(loc.t("save")) {
-                                  let project = CodeProject(name: name.isEmpty ? "Swift" : name, code: code)
-                                  store.add(project)
-                                  dismiss()
-                              }
-                              .disabled(code.isEmpty)
-                          }
-                      }
-                  }
-                  .environment(\.layoutDirection, loc.language.layoutDirection)
-              }
-          }
-          PXEOF
-
-      - name: Generate Source - ProjectDetailView.swift
-        run: |
-          cat > ProjectDetailView.swift << 'PXEOF'
-          import SwiftUI
-
-          struct ProjectDetailView: View {
-              @ObservedObject var store: ProjectsStore
-              @ObservedObject var loc = LocalizationManager.shared
-              @State var project: CodeProject
-
-              @State private var diagnostics: [Diagnostic] = []
-              @State private var hasBuilt = false
-              @State private var isBuilding = false
-              @State private var scrollRange: NSRange? = nil
-              @State private var showSearch = false
-              @State private var searchQuery = ""
-              @State private var replaceQuery = ""
-              @State private var matchRanges: [NSRange] = []
-              @State private var currentMatch = 0
-              @State private var showShare = false
-              @State private var shareURL: URL? = nil
-              @State private var saveDebounce: DispatchWorkItem? = nil
-              @StateObject private var editorActions = EditorActions()
-              @State private var fontSize: CGFloat = 13
-              @State private var fixedToast: Int? = nil
-
-              private var dateString: String {
-                  let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .short
-                  return f.string(from: project.createdAt)
-              }
-
-              var body: some View {
-                  ScrollView {
-                      VStack(spacing: 16) {
-                          PhoneFrameView {
-                              CodeEditorView(text: .constant(project.code), isEditable: false, scrollToRange: .constant(nil))
-                          }
-                          .padding(.top, 10)
-
-                          if showSearch {
-                              searchBar
-                          }
-
-                          Text(loc.t("editor")).font(.subheadline).foregroundColor(.gray)
-                          CodeEditorView(text: $project.code, isEditable: true, scrollToRange: $scrollRange, actions: editorActions, fontSize: fontSize)
-                              .frame(height: 320)
-                              .onChange(of: project.code) { _ in scheduleSave() }
-
-                          editorToolbar
-
-                          HStack(spacing: 12) {
-                              Button {
-                                  runBuild()
-                              } label: {
-                                  if isBuilding {
-                                      ProgressView().tint(.white)
-                                  } else {
-                                      Label(loc.t("build"), systemImage: "hammer.fill")
-                                  }
-                              }
-                              .frame(maxWidth: .infinity)
-                              .buttonStyle(.borderedProminent)
-
-                              Button { showShare = true; exportFile() } label: {
-                                  Image(systemName: "square.and.arrow.up")
-                              }
-                              .buttonStyle(.bordered)
-                          }
-                          .padding(.horizontal)
-
-                          if let fixed = fixedToast {
-                              Text("\(loc.t("fixed_count")) \(fixed) \(loc.t("issues_word"))")
-                                  .font(.caption).foregroundColor(.green)
-                          }
-
-                          if hasBuilt {
-                              BuildResultsView(diagnostics: diagnostics) { diag in
-                                  project.code = SwiftAnalyzer.applyFix(diag, to: project.code)
-                                  runBuild()
-                              } onJump: { diag in
-                                  if let r = SwiftLexer.nsRange(forLine: diag.line, in: project.code) {
-                                      scrollRange = r
-                                  }
-                              } onFixAll: {
-                                  runFixAll()
-                              }
-                          }
-
-                          VStack(alignment: .leading, spacing: 12) {
-                              Text(loc.t("inspector")).font(.headline)
-                              inspectorRow(loc.t("lines"), "\(SwiftAnalyzer.lineCount(project.code))")
-                              inspectorRow(loc.t("characters"), "\(project.code.count)")
-                              inspectorRow(loc.t("functions"), "\(SwiftAnalyzer.functionCount(project.code))")
-                              inspectorRow(loc.t("created"), dateString)
-                          }
-                          .padding()
-                          .background(RoundedRectangle(cornerRadius: 14).fill(Color(white: 0.12)))
-                          .padding(.horizontal)
-                      }
-                      .padding(.bottom, 30)
-                  }
-                  .navigationTitle(project.name)
-                  .toolbar {
-                      ToolbarItem(placement: .primaryAction) {
-                          Button { showSearch.toggle() } label: { Image(systemName: "magnifyingglass") }
-                      }
-                  }
-                  .sheet(isPresented: $showShare) {
-                      if let url = shareURL { ActivityView(items: [url]) }
-                  }
-                  .environment(\.layoutDirection, loc.language.layoutDirection)
-              }
-
-              private var searchBar: some View {
-                  VStack(spacing: 6) {
-                      HStack {
-                          TextField(loc.t("search"), text: $searchQuery)
-                              .textFieldStyle(.roundedBorder)
-                              .onChange(of: searchQuery) { _ in performSearch() }
-                          Button { jumpMatch(-1) } label: { Image(systemName: "chevron.up") }
-                          Button { jumpMatch(1) } label: { Image(systemName: "chevron.down") }
-                      }
-                      HStack {
-                          TextField(loc.t("replace_with"), text: $replaceQuery)
-                              .textFieldStyle(.roundedBorder)
-                          Button(loc.t("replace_all")) { replaceAll() }
-                              .buttonStyle(.bordered)
-                              .disabled(searchQuery.isEmpty || matchRanges.isEmpty)
-                      }
-                      if !searchQuery.isEmpty {
-                          Text(matchRanges.isEmpty ? loc.t("no_matches") : "\(matchRanges.count) \(loc.t("matches"))")
-                              .font(.caption2).foregroundColor(.gray)
-                      }
-                  }
-                  .padding(.horizontal)
-              }
-
-              // Real editor toolbar backed by the UITextView's own UndoManager,
-              // a genuine font-size change, and real text-insertion templates.
-              private var editorToolbar: some View {
-                  HStack(spacing: 14) {
-                      Button { editorActions.undo() } label: { Image(systemName: "arrow.uturn.backward.circle") }
-                      Button { editorActions.redo() } label: { Image(systemName: "arrow.uturn.forward.circle") }
-                      Divider().frame(height: 18)
-                      Button { fontSize = max(10, fontSize - 1) } label: { Image(systemName: "textformat.size.smaller") }
-                      Text("\(Int(fontSize))").font(.caption).foregroundColor(.gray).frame(width: 20)
-                      Button { fontSize = min(24, fontSize + 1) } label: { Image(systemName: "textformat.size.larger") }
-                      Divider().frame(height: 18)
-                      Menu {
-                          Button(loc.t("tpl_view")) { editorActions.insertAtCursor(Templates.swiftUIView) }
-                          Button(loc.t("tpl_struct")) { editorActions.insertAtCursor(Templates.structTemplate) }
-                          Button(loc.t("tpl_class")) { editorActions.insertAtCursor(Templates.classTemplate) }
-                          Button(loc.t("tpl_function")) { editorActions.insertAtCursor(Templates.functionTemplate) }
-                      } label: {
-                          Label(loc.t("templates"), systemImage: "text.badge.plus")
-                      }
-                      Spacer()
-                  }
-                  .font(.subheadline)
-                  .padding(.horizontal)
-              }
-
-              private func replaceAll() {
-                  guard !searchQuery.isEmpty else { return }
-                  project.code = project.code.replacingOccurrences(of: searchQuery, with: replaceQuery, options: .caseInsensitive)
-                  performSearch()
-              }
-
-              private func runFixAll() {
-                  let result = SwiftAnalyzer.fixAll(project.code)
-                  project.code = result.code
-                  fixedToast = result.fixedCount
-                  runBuild()
-                  DispatchQueue.main.asyncAfter(deadline: .now() + 3) { fixedToast = nil }
-              }
-
-              private func performSearch() {
-                  matchRanges = []
-                  currentMatch = 0
-                  guard !searchQuery.isEmpty else { return }
-                  let ns = project.code as NSString
-                  var searchStart = 0
-                  while searchStart < ns.length {
-                      let range = ns.range(of: searchQuery, options: .caseInsensitive, range: NSRange(location: searchStart, length: ns.length - searchStart))
-                      if range.location == NSNotFound { break }
-                      matchRanges.append(range)
-                      searchStart = range.location + max(range.length, 1)
-                  }
-                  if let first = matchRanges.first { scrollRange = first }
-              }
-
-              private func jumpMatch(_ delta: Int) {
-                  guard !matchRanges.isEmpty else { return }
-                  currentMatch = (currentMatch + delta + matchRanges.count) % matchRanges.count
-                  scrollRange = matchRanges[currentMatch]
-              }
-
-              private func runBuild() {
-                  isBuilding = true
-                  let snapshot = project.code
-                  DispatchQueue.global(qos: .userInitiated).async {
-                      let result = SwiftAnalyzer.analyze(snapshot)
-                      DispatchQueue.main.async {
-                          diagnostics = result
-                          hasBuilt = true
-                          isBuilding = false
-                      }
-                  }
-              }
-
-              private func scheduleSave() {
-                  saveDebounce?.cancel()
-                  let item = DispatchWorkItem { store.update(project) }
-                  saveDebounce = item
-                  DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: item)
-              }
-
-              private func exportFile() {
-                  let dir = FileManager.default.temporaryDirectory
-                  let safeName = project.name.replacingOccurrences(of: " ", with: "_")
-                  let url = dir.appendingPathComponent("\(safeName).swift")
-                  try? project.code.write(to: url, atomically: true, encoding: .utf8)
-                  shareURL = url
-              }
-
-              private func inspectorRow(_ label: String, _ value: String) -> some View {
-                  HStack { Text(label).foregroundColor(.gray); Spacer(); Text(value).fontWeight(.medium) }
-                      .font(.subheadline)
-              }
-          }
-          PXEOF
-
-      - name: Generate Source - ProjectsListView.swift
-        run: |
-          cat > ProjectsListView.swift << 'PXEOF'
-          import SwiftUI
-
-          struct ProjectsListView: View {
-              @ObservedObject var store: ProjectsStore
-              @ObservedObject var loc = LocalizationManager.shared
-              @State private var showAdd = false
-              @State private var renameTarget: CodeProject? = nil
-              @State private var renameText: String = ""
-              @State private var showExport = false
-              @State private var exportURL: URL? = nil
-              @State private var showImportPicker = false
-              @State private var importAlertMessage: String? = nil
-
-              var body: some View {
-                  NavigationStack {
-                      Group {
-                          if store.projects.isEmpty {
-                              VStack(spacing: 10) {
-                                  Image(systemName: "hammer.circle").font(.system(size: 40)).foregroundColor(.gray)
-                                  Text(loc.t("no_projects")).foregroundColor(.gray)
-                                      .multilineTextAlignment(.center).padding(.horizontal, 40)
-                              }
-                          } else {
-                              List {
-                                  ForEach(store.projects) { project in
-                                      NavigationLink(destination: ProjectDetailView(store: store, project: project)) {
-                                          VStack(alignment: .leading, spacing: 4) {
-                                              Text(project.name).font(.headline)
-                                              Text("\(SwiftAnalyzer.lineCount(project.code)) \(loc.t("lines"))")
-                                                  .font(.caption).foregroundColor(.gray)
-                                          }
-                                      }
-                                      .contextMenu {
-                                          Button { renameText = project.name; renameTarget = project } label: {
-                                              Label(loc.t("rename"), systemImage: "pencil")
-                                          }
-                                          Button { store.duplicate(project) } label: {
-                                              Label(loc.t("duplicate"), systemImage: "doc.on.doc")
-                                          }
-                                          Button(role: .destructive) {
-                                              if let idx = store.projects.firstIndex(where: { $0.id == project.id }) {
-                                                  store.delete(at: IndexSet(integer: idx))
-                                              }
-                                          } label: {
-                                              Label(loc.t("delete"), systemImage: "trash")
-                                          }
-                                      }
-                                  }
-                                  .onDelete(perform: store.delete)
-                              }
-                          }
-                      }
-                      .navigationTitle(loc.t("app_title"))
-                      .toolbar {
-                          ToolbarItem(placement: .primaryAction) {
-                              Button { showAdd = true } label: { Image(systemName: "plus.circle.fill") }
-                          }
-                          ToolbarItem(placement: .navigationBarLeading) {
-                              Menu {
-                                  Menu(loc.t("sort_by")) {
-                                      Button(loc.t("sort_name")) { store.sort(by: .name) }
-                                      Button(loc.t("sort_date")) { store.sort(by: .date) }
-                                      Button(loc.t("sort_size")) { store.sort(by: .size) }
-                                  }
-                                  Button { exportBackup() } label: {
-                                      Label(loc.t("backup_export"), systemImage: "square.and.arrow.up")
-                                  }
-                                  Button { showImportPicker = true } label: {
-                                      Label(loc.t("backup_import"), systemImage: "square.and.arrow.down")
-                                  }
-                              } label: {
-                                  Image(systemName: "ellipsis.circle")
-                              }
-                          }
-                      }
-                      .sheet(isPresented: $showAdd) { AddProjectView(store: store) }
-                      .sheet(isPresented: $showExport) {
-                          if let url = exportURL { ActivityView(items: [url]) }
-                      }
-                      .sheet(isPresented: $showImportPicker) {
-                          DocumentPicker { url in importBackup(from: url) }
-                      }
-                      .alert(loc.t("rename"), isPresented: Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })) {
-                          TextField(loc.t("new_name"), text: $renameText)
-                          Button(loc.t("cancel"), role: .cancel) { renameTarget = nil }
-                          Button(loc.t("save")) {
-                              if let target = renameTarget { store.rename(target, to: renameText) }
-                              renameTarget = nil
-                          }
-                      }
-                      .alert(item: Binding(
-                          get: { importAlertMessage.map { IdentifiableString(value: $0) } },
-                          set: { importAlertMessage = $0?.value }
-                      )) { wrapped in
-                          Alert(title: Text(wrapped.value))
-                      }
-                  }
-                  .environment(\.layoutDirection, loc.language.layoutDirection)
-              }
-
-              private func exportBackup() {
-                  guard let data = store.exportBackupData() else { return }
-                  let url = FileManager.default.temporaryDirectory.appendingPathComponent("previewx_backup.json")
-                  try? data.write(to: url, options: .atomic)
-                  exportURL = url
-                  showExport = true
-              }
-
-              private func importBackup(from url: URL) {
-                  guard let data = try? Data(contentsOf: url) else {
-                      importAlertMessage = loc.t("import_failed"); return
-                  }
-                  let added = store.importBackup(from: data)
-                  importAlertMessage = added > 0 ? "\(loc.t("import_success")) (\(added))" : loc.t("import_failed")
-              }
-          }
-
-          struct IdentifiableString: Identifiable {
-              let id = UUID()
-              let value: String
-          }
-          PXEOF
-
-      - name: Generate Source - SettingsView.swift
-        run: |
-          cat > SettingsView.swift << 'PXEOF'
-          import SwiftUI
-
-          struct SettingsView: View {
-              @ObservedObject var loc = LocalizationManager.shared
-              var body: some View {
-                  NavigationStack {
-                      Form {
-                          Section(loc.t("app_language")) {
-                              Picker(loc.t("app_language"), selection: $loc.language) {
-                                  ForEach(AppLanguage.allCases) { lang in Text(lang.displayName).tag(lang) }
-                              }
-                              .pickerStyle(.segmented)
-                          }
-                          Section(loc.t("about")) {
-                              Text(loc.t("about_text")).font(.footnote).foregroundColor(.gray)
-                          }
-                      }
-                      .navigationTitle(loc.t("tab_settings"))
-                  }
-                  .environment(\.layoutDirection, loc.language.layoutDirection)
-              }
-          }
-          PXEOF
-
-      - name: Generate Source - ContentView.swift
-        run: |
-          cat > ContentView.swift << 'PXEOF'
-          import SwiftUI
-
-          struct ContentView: View {
-              @StateObject private var store = ProjectsStore()
-              @ObservedObject var loc = LocalizationManager.shared
-              var body: some View {
-                  TabView {
-                      ProjectsListView(store: store)
-                          .tabItem { Label(loc.t("tab_projects"), systemImage: "hammer") }
-                      SettingsView()
-                          .tabItem { Label(loc.t("tab_settings"), systemImage: "gearshape") }
-                  }
-                  .environment(\.layoutDirection, loc.language.layoutDirection)
-                  .preferredColorScheme(.dark)
-              }
-          }
-          PXEOF
-
-      - name: Generate Source - PreviewXApp.swift
-        run: |
-          cat > PreviewXApp.swift << 'PXEOF'
-          import SwiftUI
-
-          @main
-          struct PreviewXApp: App {
-              var body: some Scene { WindowGroup { ContentView() } }
-          }
-          PXEOF
-
-      - name: Build Application
-        run: |
-          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          xcrun swiftc \
-            Localization.swift \
-            Models.swift \
-            SwiftLexer.swift \
-            SwiftHighlighter.swift \
-            SwiftAnalyzer.swift \
-            Templates.swift \
-            CodeEditorView.swift \
-            DocumentPicker.swift \
-            PhoneFrameView.swift \
-            BuildResultsView.swift \
-            AddProjectView.swift \
-            ProjectDetailView.swift \
-            ProjectsListView.swift \
-            SettingsView.swift \
-            ContentView.swift \
-            PreviewXApp.swift \
-            -sdk "$SDK" \
-            -target arm64-apple-ios16.0 \
-            -O \
-            -module-name PreviewX \
-            -framework SwiftUI \
-            -framework UIKit \
-            -framework Foundation \
-            -o PreviewX
-          file PreviewX
-
-      - name: Create IPA Package
-        run: |
-          mkdir -p artifacts
-          rm -rf build-output
-          mkdir -p build-output/Payload/PreviewX.app
-          cp PreviewX                             build-output/Payload/PreviewX.app/PreviewX
-          cp Resources/Info.plist                 build-output/Payload/PreviewX.app/Info.plist
-          cp Resources/AppIcon60x60@2x.png        build-output/Payload/PreviewX.app/
-          cp Resources/AppIcon76x76@2x~ipad.png   build-output/Payload/PreviewX.app/
-          cp Resources/AppIcon1024x1024.png       build-output/Payload/PreviewX.app/
-          ldid -S build-output/Payload/PreviewX.app/PreviewX
-          cd build-output && zip -r -q ../artifacts/PreviewX.ipa Payload/ && cd ..
-          echo "IPA: $(du -sh artifacts/PreviewX.ipa)"
-
-      - name: Upload Artifact
+      # --------------------------------------------------------------------------
+      # 12. Upload the signed IPA as a workflow artifact.
+      # --------------------------------------------------------------------------
+      - name: Upload signed IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PreviewX-Swift-Pro-IPA-v3.1
-          path: artifacts/PreviewX.ipa
+          name: signed-ipa
+          path: |
+            ${{ env.SIGNED_IPA_PATH }}
+            ${{ env.SIGNED_ZIP_PATH }}
+          if-no-files-found: error
+          retention-days: 14
+
+      # --------------------------------------------------------------------------
+      # 13. Optionally create a GitHub Release and attach the signed IPA.
+      # --------------------------------------------------------------------------
+      - name: Create GitHub Release
+        if: ${{ inputs.create_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "signed-${{ github.run_id }}"
+          name: "Signed IPA build ${{ github.run_id }}"
+          files: |
+            ${{ env.SIGNED_IPA_PATH }}
+            ${{ env.SIGNED_ZIP_PATH }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # --------------------------------------------------------------------------
+      # 14. Cleanup — always runs, even on failure, so secrets never linger
+      #     in keychains/profile directories on the runner.
+      # --------------------------------------------------------------------------
+      - name: Clean up keychain and provisioning profile
+        if: always()
+        run: |
+          set +e
+          security delete-keychain "$KEYCHAIN_NAME" 2>/dev/null
+          if [ -f "$PROFILE_UUID_FILE" ]; then
+            UUID=$(cat "$PROFILE_UUID_FILE")
+            rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
+          fi
+          rm -rf /tmp/signing
+          echo "🧹 Cleanup complete"
+
+      # --------------------------------------------------------------------------
+      # 15. Job summary — clear pass/fail status visible in the Actions UI.
+      # --------------------------------------------------------------------------
+      - name: Write job summary
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "## ✅ iOS IPA Signing — Success" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## ❌ iOS IPA Signing — Failed" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "- Run ID: \`${{ github.run_id }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source: \`${{ inputs.ipa_source }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Release created: \`${{ inputs.create_release }}\`" >> "$GITHUB_STEP_SUMMARY"
