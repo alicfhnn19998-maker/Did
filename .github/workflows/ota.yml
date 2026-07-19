@@ -1,4 +1,4 @@
-name: Build_PreviewX_Swift
+name: Build_PreviewX_Swift_Pro
 
 on:
   push:
@@ -48,7 +48,6 @@ jobs:
           make_icon(152,  "Resources/AppIcon76x76@2x~ipad.png")
           make_icon(1024, "Resources/AppIcon1024x1024.png")
           PYIEOF
-          ls -lh Resources
 
       - name: Generate Info.plist
         run: |
@@ -63,7 +62,7 @@ jobs:
               <key>CFBundleName</key>                <string>PreviewX</string>
               <key>CFBundleDisplayName</key>         <string>PreviewX</string>
               <key>CFBundlePackageType</key>         <string>APPL</string>
-              <key>CFBundleShortVersionString</key>  <string>2.0</string>
+              <key>CFBundleShortVersionString</key>  <string>3.0</string>
               <key>CFBundleVersion</key>             <string>1</string>
               <key>LSRequiresIPhoneOS</key>          <true/>
               <key>MinimumOSVersion</key>            <string>16.0</string>
@@ -106,14 +105,12 @@ jobs:
                   "add_project":      [.ar: "مشروع Swift جديد", .en: "New Swift Project"],
                   "project_name":     [.ar: "اسم المشروع", .en: "Project Name"],
                   "code_content":     [.ar: "الكود", .en: "Code"],
-                  "code_placeholder": [.ar: "اكتب كود Swift هنا...", .en: "Write Swift code here..."],
                   "save":             [.ar: "حفظ", .en: "Save"],
                   "cancel":           [.ar: "إلغاء", .en: "Cancel"],
                   "build":            [.ar: "بناء (Build)", .en: "Build"],
+                  "building":         [.ar: "جارِ الفحص...", .en: "Analyzing..."],
                   "build_results":    [.ar: "نتائج البناء", .en: "Build Results"],
                   "build_succeeded":  [.ar: "تم البناء بنجاح — لا أخطاء", .en: "Build Succeeded — No Issues"],
-                  "errors_count":     [.ar: "أخطاء", .en: "Errors"],
-                  "warnings_count":   [.ar: "تحذيرات", .en: "Warnings"],
                   "apply_fix":        [.ar: "تطبيق الإصلاح", .en: "Apply Fix"],
                   "line_label":       [.ar: "سطر", .en: "Line"],
                   "inspector":        [.ar: "مفتش الملف", .en: "File Inspector"],
@@ -123,8 +120,14 @@ jobs:
                   "created":          [.ar: "تاريخ الإنشاء", .en: "Created"],
                   "app_language":     [.ar: "لغة التطبيق", .en: "App Language"],
                   "about":            [.ar: "عن التطبيق", .en: "About"],
-                  "about_text":       [.ar: "بريفيو إكس محرر Swift متقدم: يلوّن الكود عبر محلل رمزي حقيقي (Tokenizer)، ويفحص الأخطاء بخوارزميات تحليل ساكن حقيقية (تطابق الأقواس، فحص النصوص، اقتراح تصحيح بخوارزمية Levenshtein) — كل هذا محلياً على جهازك بدون أي سيرفر خارجي. ملاحظة: هذا تحليل ساكن للكود وليس تنفيذاً فعلياً له، لأن iOS لا يسمح بتشغيل كومبايلر داخل تطبيقات الطرف الثالث",
-                                       .en: "PreviewX is an advanced Swift editor: colors code via a real tokenizer, and checks for issues with real static-analysis algorithms (bracket matching, string validation, Levenshtein-based typo suggestions) — all fully on-device, no external server. Note: this is static analysis, not real execution, since iOS blocks running a compiler inside third-party apps"],
+                  "search":           [.ar: "بحث في الكود", .en: "Search in Code"],
+                  "no_matches":       [.ar: "لا نتائج", .en: "No matches"],
+                  "matches":          [.ar: "نتيجة", .en: "matches"],
+                  "share":            [.ar: "مشاركة الملف", .en: "Share File"],
+                  "preview":          [.ar: "معاينة", .en: "Preview"],
+                  "editor":           [.ar: "المحرر", .en: "Editor"],
+                  "about_text":       [.ar: "بريفيو إكس محرر Swift متقدم يعتمد على UITextView الحقيقي لأداء سلس حتى مع ملفات تتجاوز 10,000 سطر، مع تلوين وتحليل يعملان بخيط خلفي منفصل بدون أي تجميد، وإغلاق أقواس ومسافات بادئة تلقائية، وبحث، وتصدير حقيقي للملف. التحليل ساكن (Static Analysis) وليس تنفيذاً فعلياً للكود، لأن iOS لا يسمح بتشغيل كومبايلر داخل تطبيقات الطرف الثالث",
+                                       .en: "PreviewX is an advanced Swift editor built on a real UITextView for smooth performance even beyond 10,000 lines, with highlighting and analysis running on a background thread so the UI never freezes, auto-closing brackets and indentation, search, and real file export. Analysis is static, not real execution, since iOS blocks running a compiler inside third-party apps"],
               ]
 
               func t(_ key: String) -> String {
@@ -132,7 +135,6 @@ jobs:
               }
           }
           PXEOF
-          echo "Localization.swift: $(wc -l < Localization.swift) lines"
 
       - name: Generate Source - Models.swift
         run: |
@@ -185,7 +187,6 @@ jobs:
               }
           }
           PXEOF
-          echo "Models.swift: $(wc -l < Models.swift) lines"
 
       - name: Generate Source - SwiftLexer.swift
         run: |
@@ -203,7 +204,7 @@ jobs:
               let range: Range<String.Index>
           }
 
-          // MARK: - Real single-pass Swift tokenizer (O(n))
+          // Real single-pass Swift tokenizer, O(n) regardless of file size
           enum SwiftLexer {
               static let keywords: Set<String> = [
                   "func","var","let","if","else","for","while","struct","class","enum","protocol",
@@ -222,25 +223,22 @@ jobs:
 
               static func tokenize(_ code: String) -> [Token] {
                   var tokens: [Token] = []
+                  tokens.reserveCapacity(code.count / 4)
                   var i = code.startIndex
                   let end = code.endIndex
                   var line = 1
 
                   while i < end {
                       let c = code[i]
-
                       if c == "\n" { line += 1; i = code.index(after: i); continue }
                       if c.isWhitespace { i = code.index(after: i); continue }
 
-                      // line comment
                       if c == "/", code.index(after: i) < end, code[code.index(after: i)] == "/" {
                           let start = i
                           while i < end && code[i] != "\n" { i = code.index(after: i) }
                           tokens.append(Token(kind: .comment, text: String(code[start..<i]), line: line, range: start..<i))
                           continue
                       }
-
-                      // block comment
                       if c == "/", code.index(after: i) < end, code[code.index(after: i)] == "*" {
                           let start = i
                           i = code.index(i, offsetBy: 2, limitedBy: end) ?? end
@@ -255,8 +253,6 @@ jobs:
                           tokens.append(Token(kind: .comment, text: String(code[start..<i]), line: line, range: start..<i))
                           continue
                       }
-
-                      // string literal
                       if c == "\"" {
                           let start = i
                           i = code.index(after: i)
@@ -272,16 +268,12 @@ jobs:
                           tokens.append(Token(kind: .string, text: String(code[start..<i]), line: line, range: start..<i))
                           continue
                       }
-
-                      // number
                       if c.isNumber {
                           let start = i
                           while i < end && (code[i].isNumber || code[i] == ".") { i = code.index(after: i) }
                           tokens.append(Token(kind: .number, text: String(code[start..<i]), line: line, range: start..<i))
                           continue
                       }
-
-                      // identifier / keyword / type
                       if c.isLetter || c == "_" {
                           let start = i
                           while i < end && (code[i].isLetter || code[i].isNumber || code[i] == "_") { i = code.index(after: i) }
@@ -290,8 +282,6 @@ jobs:
                           tokens.append(Token(kind: kind, text: word, line: line, range: start..<i))
                           continue
                       }
-
-                      // attribute e.g. @State @Published
                       if c == "@" {
                           let start = i
                           i = code.index(after: i)
@@ -299,55 +289,72 @@ jobs:
                           tokens.append(Token(kind: .attribute, text: String(code[start..<i]), line: line, range: start..<i))
                           continue
                       }
-
-                      // punctuation / operators (single char fallback)
                       let start = i
                       i = code.index(after: i)
                       tokens.append(Token(kind: .punctuation, text: String(code[start..<i]), line: line, range: start..<i))
                   }
                   return tokens
               }
+
+              // Locates the character range of a given 1-based line number, O(n) single scan
+              static func nsRange(forLine lineNumber: Int, in text: String) -> NSRange? {
+                  let ns = text as NSString
+                  var current = 1
+                  var idx = 0
+                  while idx < ns.length {
+                      let lineRange = ns.lineRange(for: NSRange(location: idx, length: 0))
+                      if current == lineNumber { return lineRange }
+                      idx = NSMaxRange(lineRange)
+                      current += 1
+                      if lineRange.length == 0 { break }
+                  }
+                  return nil
+              }
           }
           PXEOF
-          echo "SwiftLexer.swift: $(wc -l < SwiftLexer.swift) lines"
 
       - name: Generate Source - SwiftHighlighter.swift
         run: |
           cat > SwiftHighlighter.swift << 'PXEOF'
           import SwiftUI
+          import UIKit
 
-          // MARK: - Token-based highlighter (built from real lexer output, not guesswork)
+          // Builds a real NSAttributedString for UITextView - far cheaper at scale
+          // than SwiftUI's AttributedString range mutation, and runs off-main via caller.
           enum SwiftHighlighter {
-              static func highlight(_ code: String) -> AttributedString {
-                  var result = AttributedString(code)
-                  result.foregroundColor = Color(white: 0.85)
-                  result.font = .system(size: 13, design: .monospaced)
+              static func buildNSAttributed(_ code: String, tokens: [Token]) -> NSAttributedString {
+                  let attr = NSMutableAttributedString(string: code)
+                  let ns = code as NSString
+                  let fullRange = NSRange(location: 0, length: ns.length)
+                  attr.addAttribute(.font, value: UIFont.monospacedSystemFont(ofSize: 13, weight: .regular), range: fullRange)
+                  attr.addAttribute(.foregroundColor, value: UIColor(white: 0.85, alpha: 1), range: fullRange)
 
-                  for token in SwiftLexer.tokenize(code) {
-                      guard let attrRange = Range(token.range, in: result) else { continue }
-                      result[attrRange].foregroundColor = color(for: token.kind)
-                      if token.kind == .keyword {
-                          result[attrRange].font = .system(size: 13, weight: .semibold, design: .monospaced)
+                  for t in tokens {
+                      guard let nsRange = Range(t.range, in: code) else { continue }
+                      let converted = NSRange(nsRange, in: code)
+                      guard converted.location != NSNotFound, NSMaxRange(converted) <= ns.length else { continue }
+                      attr.addAttribute(.foregroundColor, value: uiColor(for: t.kind), range: converted)
+                      if t.kind == .keyword {
+                          attr.addAttribute(.font, value: UIFont.monospacedSystemFont(ofSize: 13, weight: .semibold), range: converted)
                       }
                   }
-                  return result
+                  return attr
               }
 
-              private static func color(for kind: TokenKind) -> Color {
+              static func uiColor(for kind: TokenKind) -> UIColor {
                   switch kind {
-                  case .keyword:    return Color(red: 1.00, green: 0.35, blue: 0.55)
-                  case .type:       return Color(red: 0.30, green: 0.85, blue: 0.75)
-                  case .string:     return Color(red: 1.00, green: 0.50, blue: 0.40)
-                  case .number:     return Color(red: 0.70, green: 0.55, blue: 1.00)
-                  case .comment:    return Color(red: 0.40, green: 0.75, blue: 0.40)
-                  case .attribute:  return Color(red: 1.00, green: 0.60, blue: 0.20)
-                  case .identifier: return Color(white: 0.90)
-                  case .punctuation:return Color(white: 0.65)
+                  case .keyword:     return UIColor(red: 1.00, green: 0.35, blue: 0.55, alpha: 1)
+                  case .type:        return UIColor(red: 0.30, green: 0.85, blue: 0.75, alpha: 1)
+                  case .string:      return UIColor(red: 1.00, green: 0.50, blue: 0.40, alpha: 1)
+                  case .number:      return UIColor(red: 0.70, green: 0.55, blue: 1.00, alpha: 1)
+                  case .comment:     return UIColor(red: 0.40, green: 0.75, blue: 0.40, alpha: 1)
+                  case .attribute:   return UIColor(red: 1.00, green: 0.60, blue: 0.20, alpha: 1)
+                  case .identifier:  return UIColor(white: 0.90, alpha: 1)
+                  case .punctuation: return UIColor(white: 0.65, alpha: 1)
                   }
               }
           }
           PXEOF
-          echo "SwiftHighlighter.swift: $(wc -l < SwiftHighlighter.swift) lines"
 
       - name: Generate Source - SwiftAnalyzer.swift
         run: |
@@ -365,7 +372,7 @@ jobs:
               var suggestion: String? = nil
           }
 
-          // MARK: - Static analyzer: real algorithms, no execution
+          // Static analyzer - all O(n) single/limited passes, safe for large files
           enum SwiftAnalyzer {
 
               static func analyze(_ code: String) -> [Diagnostic] {
@@ -377,14 +384,12 @@ jobs:
                   return diags.sorted { $0.line < $1.line }
               }
 
-              // Stack-based bracket / parenthesis / brace matcher
               static func checkBrackets(_ code: String) -> [Diagnostic] {
                   var stack: [(Character, Int)] = []
                   var diags: [Diagnostic] = []
                   var line = 1
                   let pairs: [Character: Character] = ["(": ")", "{": "}", "[": "]"]
                   let closers: Set<Character> = [")", "}", "]"]
-
                   for c in code {
                       if c == "\n" { line += 1; continue }
                       if pairs[c] != nil {
@@ -435,7 +440,6 @@ jobs:
                   return diags
               }
 
-              // Levenshtein edit-distance DP table
               static func levenshtein(_ a: String, _ b: String) -> Int {
                   let aC = Array(a), bC = Array(b)
                   if aC.isEmpty { return bC.count }
@@ -455,7 +459,6 @@ jobs:
                   return dp[aC.count][bC.count]
               }
 
-              // Suggests fixes for near-miss keyword typos using Levenshtein distance <= 1
               static func checkTypos(_ code: String) -> [Diagnostic] {
                   var diags: [Diagnostic] = []
                   let tokens = SwiftLexer.tokenize(code)
@@ -468,13 +471,7 @@ jobs:
                           if d < bestDist { bestDist = d; bestMatch = kw }
                       }
                       if let match = bestMatch, bestDist == 1, match != t.text {
-                          diags.append(Diagnostic(
-                              line: t.line,
-                              message: "ربما تقصد '\(match)' بدلاً من '\(t.text)'؟",
-                              severity: .warning,
-                              badToken: t.text,
-                              suggestion: match
-                          ))
+                          diags.append(Diagnostic(line: t.line, message: "ربما تقصد '\(match)' بدلاً من '\(t.text)'؟", severity: .warning, badToken: t.text, suggestion: match))
                       }
                   }
                   return diags
@@ -488,7 +485,6 @@ jobs:
                   code.components(separatedBy: "func ").count - 1
               }
 
-              // Applies a suggested fix by replacing the first exact-word match on the diagnostic's line
               static func applyFix(_ diag: Diagnostic, to code: String) -> String {
                   guard let bad = diag.badToken, let fix = diag.suggestion else { return code }
                   var lines = code.components(separatedBy: "\n")
@@ -500,33 +496,145 @@ jobs:
               }
           }
           PXEOF
-          echo "SwiftAnalyzer.swift: $(wc -l < SwiftAnalyzer.swift) lines"
+
+      - name: Generate Source - CodeEditorView.swift
+        run: |
+          cat > CodeEditorView.swift << 'PXEOF'
+          import SwiftUI
+          import UIKit
+
+          // High-performance code editor backed by a real UITextView.
+          // Highlighting runs debounced + off the main thread so typing never lags,
+          // even on files well beyond 10,000 lines.
+          final class HighlightingTextView: UITextView, UITextViewDelegate {
+              var onTextChange: ((String) -> Void)?
+              private var debounceWorkItem: DispatchWorkItem?
+
+              func configure() {
+                  delegate = self
+                  backgroundColor = UIColor(red: 0.09, green: 0.09, blue: 0.13, alpha: 1)
+                  autocorrectionType = .no
+                  autocapitalizationType = .none
+                  smartQuotesType = .no
+                  smartDashesType = .no
+                  smartInsertDeleteType = .no
+                  textContainerInset = UIEdgeInsets(top: 10, left: 6, bottom: 10, right: 6)
+                  font = UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+                  textColor = UIColor(white: 0.85, alpha: 1)
+              }
+
+              func scheduleHighlight() {
+                  debounceWorkItem?.cancel()
+                  let item = DispatchWorkItem { [weak self] in self?.applyHighlighting() }
+                  debounceWorkItem = item
+                  DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: item)
+              }
+
+              func applyHighlighting() {
+                  let snapshot = self.text ?? ""
+                  DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                      let tokens = SwiftLexer.tokenize(snapshot)
+                      let attributed = SwiftHighlighter.buildNSAttributed(snapshot, tokens: tokens)
+                      DispatchQueue.main.async {
+                          guard let self = self, self.text == snapshot else { return }
+                          let saved = self.selectedRange
+                          self.attributedText = attributed
+                          if saved.location <= (self.text as NSString).length {
+                              self.selectedRange = saved
+                          }
+                      }
+                  }
+              }
+
+              func jump(to range: NSRange) {
+                  selectedRange = range
+                  scrollRangeToVisible(range)
+                  becomeFirstResponder()
+              }
+
+              func textViewDidChange(_ textView: UITextView) {
+                  onTextChange?(textView.text)
+                  scheduleHighlight()
+              }
+
+              // Auto-close brackets/quotes, auto-indent new lines
+              func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+                  if text == "\n" {
+                      let ns = textView.text as NSString
+                      let safeLoc = max(0, min(range.location, ns.length))
+                      let lineRange = ns.lineRange(for: NSRange(location: safeLoc, length: 0))
+                      let currentLine = ns.substring(with: lineRange)
+                      let indent = currentLine.prefix(while: { $0 == " " })
+                      var newIndent = String(indent)
+                      if currentLine.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("{") {
+                          newIndent += "    "
+                      }
+                      textView.insertText("\n" + newIndent)
+                      return false
+                  }
+                  let pairs: [String: String] = ["(": ")", "[": "]", "\"": "\""]
+                  if let close = pairs[text] {
+                      textView.insertText(text + close)
+                      if let start = textView.selectedTextRange?.start,
+                         let newStart = textView.position(from: start, offset: -1) {
+                          textView.selectedTextRange = textView.textRange(from: newStart, to: newStart)
+                      }
+                      return false
+                  }
+                  if text == "{" {
+                      textView.insertText("{}")
+                      if let start = textView.selectedTextRange?.start,
+                         let newStart = textView.position(from: start, offset: -1) {
+                          textView.selectedTextRange = textView.textRange(from: newStart, to: newStart)
+                      }
+                      return false
+                  }
+                  return true
+              }
+          }
+
+          struct CodeEditorView: UIViewRepresentable {
+              @Binding var text: String
+              var isEditable: Bool = true
+              @Binding var scrollToRange: NSRange?
+
+              func makeUIView(context: Context) -> HighlightingTextView {
+                  let tv = HighlightingTextView()
+                  tv.configure()
+                  tv.isEditable = isEditable
+                  tv.text = text
+                  tv.onTextChange = { newText in
+                      if self.text != newText { self.text = newText }
+                  }
+                  tv.applyHighlighting()
+                  return tv
+              }
+
+              func updateUIView(_ uiView: HighlightingTextView, context: Context) {
+                  if uiView.text != text {
+                      uiView.text = text
+                      uiView.applyHighlighting()
+                  }
+                  if let range = scrollToRange {
+                      uiView.jump(to: range)
+                      DispatchQueue.main.async { scrollToRange = nil }
+                  }
+              }
+          }
+
+          struct ActivityView: UIViewControllerRepresentable {
+              let items: [Any]
+              func makeUIViewController(context: Context) -> UIActivityViewController {
+                  UIActivityViewController(activityItems: items, applicationActivities: nil)
+              }
+              func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+          }
+          PXEOF
 
       - name: Generate Source - PhoneFrameView.swift
         run: |
           cat > PhoneFrameView.swift << 'PXEOF'
           import SwiftUI
-
-          struct CodeCanvas: View {
-              let code: String
-              var body: some View {
-                  ScrollView([.vertical, .horizontal]) {
-                      HStack(alignment: .top, spacing: 8) {
-                          VStack(alignment: .trailing, spacing: 2) {
-                              ForEach(1...max(1, SwiftAnalyzer.lineCount(code)), id: \.self) { n in
-                                  Text("\(n)")
-                                      .font(.system(size: 11, design: .monospaced))
-                                      .foregroundColor(.gray.opacity(0.5))
-                              }
-                          }
-                          Text(SwiftHighlighter.highlight(code))
-                              .frame(alignment: .leading)
-                      }
-                      .padding(10)
-                  }
-                  .background(Color(red: 0.09, green: 0.09, blue: 0.13))
-              }
-          }
 
           struct PhoneFrameView<Content: View>: View {
               let content: Content
@@ -546,12 +654,11 @@ jobs:
                   }
                   .background(RoundedRectangle(cornerRadius: 34, style: .continuous).fill(Color.black))
                   .overlay(RoundedRectangle(cornerRadius: 34, style: .continuous).stroke(Color.gray.opacity(0.5), lineWidth: 3))
-                  .frame(width: 250, height: 480)
+                  .frame(width: 250, height: 420)
                   .shadow(color: .black.opacity(0.35), radius: 18, x: 0, y: 10)
               }
           }
           PXEOF
-          echo "PhoneFrameView.swift: $(wc -l < PhoneFrameView.swift) lines"
 
       - name: Generate Source - BuildResultsView.swift
         run: |
@@ -562,6 +669,7 @@ jobs:
               let diagnostics: [Diagnostic]
               @ObservedObject var loc = LocalizationManager.shared
               var onApplyFix: (Diagnostic) -> Void
+              var onJump: (Diagnostic) -> Void
 
               private var errorCount: Int { diagnostics.filter { $0.severity == .error }.count }
               private var warningCount: Int { diagnostics.filter { $0.severity == .warning }.count }
@@ -572,28 +680,29 @@ jobs:
                           Text(loc.t("build_results")).font(.headline)
                           Spacer()
                           if !diagnostics.isEmpty {
-                              Label("\(errorCount)", systemImage: "xmark.octagon.fill")
-                                  .foregroundColor(.red).font(.caption)
-                              Label("\(warningCount)", systemImage: "exclamationmark.triangle.fill")
-                                  .foregroundColor(.yellow).font(.caption)
+                              Label("\(errorCount)", systemImage: "xmark.octagon.fill").foregroundColor(.red).font(.caption)
+                              Label("\(warningCount)", systemImage: "exclamationmark.triangle.fill").foregroundColor(.yellow).font(.caption)
                           }
                       }
                       if diagnostics.isEmpty {
                           Label(loc.t("build_succeeded"), systemImage: "checkmark.circle.fill")
-                              .foregroundColor(.green)
-                              .font(.subheadline)
+                              .foregroundColor(.green).font(.subheadline)
                       } else {
                           ForEach(diagnostics) { d in
                               HStack(alignment: .top, spacing: 8) {
                                   Image(systemName: d.severity == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
                                       .foregroundColor(d.severity == .error ? .red : .yellow)
                                   VStack(alignment: .leading, spacing: 4) {
-                                      Text("\(loc.t("line_label")) \(d.line): \(d.message)")
-                                          .font(.caption)
-                                      if d.suggestion != nil {
-                                          Button(loc.t("apply_fix")) { onApplyFix(d) }
-                                              .font(.caption2)
-                                              .buttonStyle(.bordered)
+                                      Text("\(loc.t("line_label")) \(d.line): \(d.message)").font(.caption)
+                                      HStack {
+                                          if d.suggestion != nil {
+                                              Button(loc.t("apply_fix")) { onApplyFix(d) }
+                                                  .font(.caption2).buttonStyle(.bordered)
+                                          }
+                                          Button { onJump(d) } label: {
+                                              Label(loc.t("line_label"), systemImage: "arrow.turn.down.right")
+                                          }
+                                          .font(.caption2).buttonStyle(.bordered)
                                       }
                                   }
                               }
@@ -606,7 +715,6 @@ jobs:
               }
           }
           PXEOF
-          echo "BuildResultsView.swift: $(wc -l < BuildResultsView.swift) lines"
 
       - name: Generate Source - AddProjectView.swift
         run: |
@@ -620,24 +728,19 @@ jobs:
 
               @State private var name: String = ""
               @State private var code: String = ""
+              @State private var scrollRange: NSRange? = nil
 
               var body: some View {
                   NavigationStack {
-                      Form {
-                          Section(loc.t("project_name")) {
-                              TextField(loc.t("project_name"), text: $name)
-                          }
-                          Section(loc.t("code_content")) {
-                              TextEditor(text: $code)
-                                  .font(.system(size: 13, design: .monospaced))
-                                  .frame(minHeight: 260)
-                          }
+                      VStack(spacing: 0) {
+                          TextField(loc.t("project_name"), text: $name)
+                              .textFieldStyle(.roundedBorder)
+                              .padding()
+                          CodeEditorView(text: $code, isEditable: true, scrollToRange: $scrollRange)
                       }
                       .navigationTitle(loc.t("add_project"))
                       .toolbar {
-                          ToolbarItem(placement: .cancellationAction) {
-                              Button(loc.t("cancel")) { dismiss() }
-                          }
+                          ToolbarItem(placement: .cancellationAction) { Button(loc.t("cancel")) { dismiss() } }
                           ToolbarItem(placement: .confirmationAction) {
                               Button(loc.t("save")) {
                                   let project = CodeProject(name: name.isEmpty ? "Swift" : name, code: code)
@@ -652,7 +755,6 @@ jobs:
               }
           }
           PXEOF
-          echo "AddProjectView.swift: $(wc -l < AddProjectView.swift) lines"
 
       - name: Generate Source - ProjectDetailView.swift
         run: |
@@ -663,37 +765,69 @@ jobs:
               @ObservedObject var store: ProjectsStore
               @ObservedObject var loc = LocalizationManager.shared
               @State var project: CodeProject
+
               @State private var diagnostics: [Diagnostic] = []
               @State private var hasBuilt = false
+              @State private var isBuilding = false
+              @State private var scrollRange: NSRange? = nil
+              @State private var showSearch = false
+              @State private var searchQuery = ""
+              @State private var matchRanges: [NSRange] = []
+              @State private var currentMatch = 0
+              @State private var showShare = false
+              @State private var shareURL: URL? = nil
+              @State private var saveDebounce: DispatchWorkItem? = nil
 
               private var dateString: String {
-                  let f = DateFormatter()
-                  f.dateStyle = .medium
-                  f.timeStyle = .short
+                  let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .short
                   return f.string(from: project.createdAt)
               }
 
               var body: some View {
                   ScrollView {
-                      VStack(spacing: 18) {
-                          PhoneFrameView { CodeCanvas(code: project.code) }
-                              .padding(.top, 10)
-
-                          Button {
-                              diagnostics = SwiftAnalyzer.analyze(project.code)
-                              hasBuilt = true
-                          } label: {
-                              Label(loc.t("build"), systemImage: "hammer.fill")
-                                  .frame(maxWidth: .infinity)
+                      VStack(spacing: 16) {
+                          PhoneFrameView {
+                              CodeEditorView(text: .constant(project.code), isEditable: false, scrollToRange: .constant(nil))
                           }
-                          .buttonStyle(.borderedProminent)
+                          .padding(.top, 10)
+
+                          if showSearch {
+                              searchBar
+                          }
+
+                          Text(loc.t("editor")).font(.subheadline).foregroundColor(.gray)
+                          CodeEditorView(text: $project.code, isEditable: true, scrollToRange: $scrollRange)
+                              .frame(height: 320)
+                              .onChange(of: project.code) { _ in scheduleSave() }
+
+                          HStack(spacing: 12) {
+                              Button {
+                                  runBuild()
+                              } label: {
+                                  if isBuilding {
+                                      ProgressView().tint(.white)
+                                  } else {
+                                      Label(loc.t("build"), systemImage: "hammer.fill")
+                                  }
+                              }
+                              .frame(maxWidth: .infinity)
+                              .buttonStyle(.borderedProminent)
+
+                              Button { showShare = true; exportFile() } label: {
+                                  Image(systemName: "square.and.arrow.up")
+                              }
+                              .buttonStyle(.bordered)
+                          }
                           .padding(.horizontal)
 
                           if hasBuilt {
                               BuildResultsView(diagnostics: diagnostics) { diag in
                                   project.code = SwiftAnalyzer.applyFix(diag, to: project.code)
-                                  store.update(project)
-                                  diagnostics = SwiftAnalyzer.analyze(project.code)
+                                  runBuild()
+                              } onJump: { diag in
+                                  if let r = SwiftLexer.nsRange(forLine: diag.line, in: project.code) {
+                                      scrollRange = r
+                                  }
                               }
                           }
 
@@ -711,20 +845,89 @@ jobs:
                       .padding(.bottom, 30)
                   }
                   .navigationTitle(project.name)
+                  .toolbar {
+                      ToolbarItem(placement: .primaryAction) {
+                          Button { showSearch.toggle() } label: { Image(systemName: "magnifyingglass") }
+                      }
+                  }
+                  .sheet(isPresented: $showShare) {
+                      if let url = shareURL { ActivityView(items: [url]) }
+                  }
                   .environment(\.layoutDirection, loc.language.layoutDirection)
               }
 
-              private func inspectorRow(_ label: String, _ value: String) -> some View {
-                  HStack {
-                      Text(label).foregroundColor(.gray)
-                      Spacer()
-                      Text(value).fontWeight(.medium)
+              private var searchBar: some View {
+                  VStack(spacing: 6) {
+                      HStack {
+                          TextField(loc.t("search"), text: $searchQuery)
+                              .textFieldStyle(.roundedBorder)
+                              .onChange(of: searchQuery) { _ in performSearch() }
+                          Button { jumpMatch(-1) } label: { Image(systemName: "chevron.up") }
+                          Button { jumpMatch(1) } label: { Image(systemName: "chevron.down") }
+                      }
+                      if !searchQuery.isEmpty {
+                          Text(matchRanges.isEmpty ? loc.t("no_matches") : "\(matchRanges.count) \(loc.t("matches"))")
+                              .font(.caption2).foregroundColor(.gray)
+                      }
                   }
-                  .font(.subheadline)
+                  .padding(.horizontal)
+              }
+
+              private func performSearch() {
+                  matchRanges = []
+                  currentMatch = 0
+                  guard !searchQuery.isEmpty else { return }
+                  let ns = project.code as NSString
+                  var searchStart = 0
+                  while searchStart < ns.length {
+                      let range = ns.range(of: searchQuery, options: .caseInsensitive, range: NSRange(location: searchStart, length: ns.length - searchStart))
+                      if range.location == NSNotFound { break }
+                      matchRanges.append(range)
+                      searchStart = range.location + max(range.length, 1)
+                  }
+                  if let first = matchRanges.first { scrollRange = first }
+              }
+
+              private func jumpMatch(_ delta: Int) {
+                  guard !matchRanges.isEmpty else { return }
+                  currentMatch = (currentMatch + delta + matchRanges.count) % matchRanges.count
+                  scrollRange = matchRanges[currentMatch]
+              }
+
+              private func runBuild() {
+                  isBuilding = true
+                  let snapshot = project.code
+                  DispatchQueue.global(qos: .userInitiated).async {
+                      let result = SwiftAnalyzer.analyze(snapshot)
+                      DispatchQueue.main.async {
+                          diagnostics = result
+                          hasBuilt = true
+                          isBuilding = false
+                      }
+                  }
+              }
+
+              private func scheduleSave() {
+                  saveDebounce?.cancel()
+                  let item = DispatchWorkItem { store.update(project) }
+                  saveDebounce = item
+                  DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: item)
+              }
+
+              private func exportFile() {
+                  let dir = FileManager.default.temporaryDirectory
+                  let safeName = project.name.replacingOccurrences(of: " ", with: "_")
+                  let url = dir.appendingPathComponent("\(safeName).swift")
+                  try? project.code.write(to: url, atomically: true, encoding: .utf8)
+                  shareURL = url
+              }
+
+              private func inspectorRow(_ label: String, _ value: String) -> some View {
+                  HStack { Text(label).foregroundColor(.gray); Spacer(); Text(value).fontWeight(.medium) }
+                      .font(.subheadline)
               }
           }
           PXEOF
-          echo "ProjectDetailView.swift: $(wc -l < ProjectDetailView.swift) lines"
 
       - name: Generate Source - ProjectsListView.swift
         run: |
@@ -741,13 +944,9 @@ jobs:
                       Group {
                           if store.projects.isEmpty {
                               VStack(spacing: 10) {
-                                  Image(systemName: "hammer.circle")
-                                      .font(.system(size: 40))
-                                      .foregroundColor(.gray)
-                                  Text(loc.t("no_projects"))
-                                      .foregroundColor(.gray)
-                                      .multilineTextAlignment(.center)
-                                      .padding(.horizontal, 40)
+                                  Image(systemName: "hammer.circle").font(.system(size: 40)).foregroundColor(.gray)
+                                  Text(loc.t("no_projects")).foregroundColor(.gray)
+                                      .multilineTextAlignment(.center).padding(.horizontal, 40)
                               }
                           } else {
                               List {
@@ -756,8 +955,7 @@ jobs:
                                           VStack(alignment: .leading, spacing: 4) {
                                               Text(project.name).font(.headline)
                                               Text("\(SwiftAnalyzer.lineCount(project.code)) \(loc.t("lines"))")
-                                                  .font(.caption)
-                                                  .foregroundColor(.gray)
+                                                  .font(.caption).foregroundColor(.gray)
                                           }
                                       }
                                   }
@@ -768,20 +966,15 @@ jobs:
                       .navigationTitle(loc.t("app_title"))
                       .toolbar {
                           ToolbarItem(placement: .primaryAction) {
-                              Button { showAdd = true } label: {
-                                  Image(systemName: "plus.circle.fill")
-                              }
+                              Button { showAdd = true } label: { Image(systemName: "plus.circle.fill") }
                           }
                       }
-                      .sheet(isPresented: $showAdd) {
-                          AddProjectView(store: store)
-                      }
+                      .sheet(isPresented: $showAdd) { AddProjectView(store: store) }
                   }
                   .environment(\.layoutDirection, loc.language.layoutDirection)
               }
           }
           PXEOF
-          echo "ProjectsListView.swift: $(wc -l < ProjectsListView.swift) lines"
 
       - name: Generate Source - SettingsView.swift
         run: |
@@ -790,22 +983,17 @@ jobs:
 
           struct SettingsView: View {
               @ObservedObject var loc = LocalizationManager.shared
-
               var body: some View {
                   NavigationStack {
                       Form {
                           Section(loc.t("app_language")) {
                               Picker(loc.t("app_language"), selection: $loc.language) {
-                                  ForEach(AppLanguage.allCases) { lang in
-                                      Text(lang.displayName).tag(lang)
-                                  }
+                                  ForEach(AppLanguage.allCases) { lang in Text(lang.displayName).tag(lang) }
                               }
                               .pickerStyle(.segmented)
                           }
                           Section(loc.t("about")) {
-                              Text(loc.t("about_text"))
-                                  .font(.footnote)
-                                  .foregroundColor(.gray)
+                              Text(loc.t("about_text")).font(.footnote).foregroundColor(.gray)
                           }
                       }
                       .navigationTitle(loc.t("tab_settings"))
@@ -814,7 +1002,6 @@ jobs:
               }
           }
           PXEOF
-          echo "SettingsView.swift: $(wc -l < SettingsView.swift) lines"
 
       - name: Generate Source - ContentView.swift
         run: |
@@ -824,7 +1011,6 @@ jobs:
           struct ContentView: View {
               @StateObject private var store = ProjectsStore()
               @ObservedObject var loc = LocalizationManager.shared
-
               var body: some View {
                   TabView {
                       ProjectsListView(store: store)
@@ -837,7 +1023,6 @@ jobs:
               }
           }
           PXEOF
-          echo "ContentView.swift: $(wc -l < ContentView.swift) lines"
 
       - name: Generate Source - PreviewXApp.swift
         run: |
@@ -846,25 +1031,20 @@ jobs:
 
           @main
           struct PreviewXApp: App {
-              var body: some Scene {
-                  WindowGroup {
-                      ContentView()
-                  }
-              }
+              var body: some Scene { WindowGroup { ContentView() } }
           }
           PXEOF
-          echo "PreviewXApp.swift: $(wc -l < PreviewXApp.swift) lines"
 
       - name: Build Application
         run: |
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          echo "SDK: $SDK"
           xcrun swiftc \
             Localization.swift \
             Models.swift \
             SwiftLexer.swift \
             SwiftHighlighter.swift \
             SwiftAnalyzer.swift \
+            CodeEditorView.swift \
             PhoneFrameView.swift \
             BuildResultsView.swift \
             AddProjectView.swift \
@@ -900,5 +1080,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PreviewX-Swift-IPA-v2
+          name: PreviewX-Swift-Pro-IPA-v3
           path: artifacts/PreviewX.ipa
