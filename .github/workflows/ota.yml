@@ -330,8 +330,7 @@ jobs:
                   attr.addAttribute(.foregroundColor, value: UIColor(white: 0.85, alpha: 1), range: fullRange)
 
                   for t in tokens {
-                      guard let nsRange = Range(t.range, in: code) else { continue }
-                      let converted = NSRange(nsRange, in: code)
+                      let converted = NSRange(t.range, in: code)
                       guard converted.location != NSNotFound, NSMaxRange(converted) <= ns.length else { continue }
                       attr.addAttribute(.foregroundColor, value: uiColor(for: t.kind), range: converted)
                       if t.kind == .keyword {
