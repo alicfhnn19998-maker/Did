@@ -62,9 +62,11 @@ jobs:
               <key>CFBundleName</key>                <string>PreviewX</string>
               <key>CFBundleDisplayName</key>         <string>PreviewX</string>
               <key>CFBundlePackageType</key>         <string>APPL</string>
-              <key>CFBundleShortVersionString</key>  <string>3.0</string>
-              <key>CFBundleVersion</key>             <string>1</string>
+              <key>CFBundleShortVersionString</key>  <string>3.1</string>
+              <key>CFBundleVersion</key>             <string>2</string>
               <key>LSRequiresIPhoneOS</key>          <true/>
+              <key>UIFileSharingEnabled</key>        <true/>
+              <key>LSSupportsOpeningDocumentsInPlace</key> <true/>
               <key>MinimumOSVersion</key>            <string>16.0</string>
               <key>UIDeviceFamily</key>
               <array><integer>1</integer><integer>2</integer></array>
@@ -126,8 +128,35 @@ jobs:
                   "share":            [.ar: "مشاركة الملف", .en: "Share File"],
                   "preview":          [.ar: "معاينة", .en: "Preview"],
                   "editor":           [.ar: "المحرر", .en: "Editor"],
-                  "about_text":       [.ar: "بريفيو إكس محرر Swift متقدم يعتمد على UITextView الحقيقي لأداء سلس حتى مع ملفات تتجاوز 10,000 سطر، مع تلوين وتحليل يعملان بخيط خلفي منفصل بدون أي تجميد، وإغلاق أقواس ومسافات بادئة تلقائية، وبحث، وتصدير حقيقي للملف. التحليل ساكن (Static Analysis) وليس تنفيذاً فعلياً للكود، لأن iOS لا يسمح بتشغيل كومبايلر داخل تطبيقات الطرف الثالث",
-                                       .en: "PreviewX is an advanced Swift editor built on a real UITextView for smooth performance even beyond 10,000 lines, with highlighting and analysis running on a background thread so the UI never freezes, auto-closing brackets and indentation, search, and real file export. Analysis is static, not real execution, since iOS blocks running a compiler inside third-party apps"],
+                  "about_text":       [.ar: "بريفيو إكس محرر Swift متقدم يعتمد على UITextView الحقيقي لأداء سلس حتى مع ملفات تتجاوز 10,000 سطر، مع تلوين وتحليل يعملان بخيط خلفي منفصل بدون أي تجميد، وإغلاق أقواس ومسافات بادئة تلقائية، وبحث واستبدال، وترقيم أسطر حقيقي، وتراجع/إعادة عبر UndoManager الفعلي، وتغيير حجم الخط، وقوالب كود جاهزة، وإصلاح تلقائي دفعة واحدة للمشاكل القابلة للإصلاح، ونسخ احتياطي واستيراد حقيقي بصيغة JSON عبر منتقي الملفات الرسمي، وتصدير حقيقي للملف. التحليل ساكن (Static Analysis) وليس تنفيذاً فعلياً للكود، لأن iOS لا يسمح بتشغيل كومبايلر داخل تطبيقات الطرف الثالث",
+                                       .en: "PreviewX is an advanced Swift editor built on a real UITextView for smooth performance even beyond 10,000 lines, with highlighting and analysis running on a background thread so the UI never freezes, auto-closing brackets and indentation, search & replace, a real line-number gutter, real UndoManager-backed undo/redo, adjustable font size, insertable code templates, one-tap auto-fix for fixable issues, real JSON backup export/import via the system file picker, and real file export. Analysis is static, not real execution, since iOS blocks running a compiler inside third-party apps"],
+                  "undo":             [.ar: "تراجع", .en: "Undo"],
+                  "redo":             [.ar: "إعادة", .en: "Redo"],
+                  "font_size":        [.ar: "حجم الخط", .en: "Font Size"],
+                  "templates":        [.ar: "قوالب جاهزة", .en: "Templates"],
+                  "tpl_view":         [.ar: "SwiftUI View", .en: "SwiftUI View"],
+                  "tpl_struct":       [.ar: "Struct", .en: "Struct"],
+                  "tpl_class":        [.ar: "Class", .en: "Class"],
+                  "tpl_function":     [.ar: "Function", .en: "Function"],
+                  "fix_all":          [.ar: "إصلاح الكل تلقائيًا", .en: "Auto-Fix All"],
+                  "fixed_count":      [.ar: "تم إصلاح", .en: "Fixed"],
+                  "issues_word":      [.ar: "مشكلة", .en: "issue(s)"],
+                  "rename":           [.ar: "إعادة تسمية", .en: "Rename"],
+                  "duplicate":        [.ar: "نسخ المشروع", .en: "Duplicate"],
+                  "delete":           [.ar: "حذف", .en: "Delete"],
+                  "new_name":         [.ar: "الاسم الجديد", .en: "New Name"],
+                  "backup_export":    [.ar: "تصدير نسخة احتياطية", .en: "Export Backup"],
+                  "backup_import":    [.ar: "استيراد نسخة احتياطية", .en: "Import Backup"],
+                  "import_success":   [.ar: "تم الاستيراد بنجاح", .en: "Import Successful"],
+                  "import_failed":    [.ar: "فشل الاستيراد — ملف غير صالح", .en: "Import Failed — Invalid File"],
+                  "info_notes":       [.ar: "ملاحظات (TODO)", .en: "Notes (TODO)"],
+                  "replace":          [.ar: "استبدال", .en: "Replace"],
+                  "replace_all":      [.ar: "استبدال الكل", .en: "Replace All"],
+                  "replace_with":     [.ar: "استبدال بـ", .en: "Replace with"],
+                  "sort_by":          [.ar: "ترتيب حسب", .en: "Sort by"],
+                  "sort_name":        [.ar: "الاسم", .en: "Name"],
+                  "sort_date":        [.ar: "التاريخ", .en: "Date"],
+                  "sort_size":        [.ar: "الحجم", .en: "Size"],
               ]
 
               func t(_ key: String) -> String {
@@ -184,6 +213,64 @@ jobs:
               func delete(at offsets: IndexSet) {
                   projects.remove(atOffsets: offsets)
                   save()
+              }
+
+              func duplicate(_ project: CodeProject) {
+                  var copy = project
+                  copy.id = UUID()
+                  copy.name = project.name + " copy"
+                  copy.createdAt = Date()
+                  if let idx = projects.firstIndex(where: { $0.id == project.id }) {
+                      projects.insert(copy, at: idx + 1)
+                  } else {
+                      projects.insert(copy, at: 0)
+                  }
+                  save()
+              }
+
+              func rename(_ project: CodeProject, to newName: String) {
+                  guard let idx = projects.firstIndex(where: { $0.id == project.id }) else { return }
+                  let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+                  guard !trimmed.isEmpty else { return }
+                  projects[idx].name = trimmed
+                  save()
+              }
+
+              enum SortOption: String, CaseIterable, Identifiable {
+                  case name, date, size
+                  var id: String { rawValue }
+              }
+
+              func sort(by option: SortOption) {
+                  switch option {
+                  case .name: projects.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                  case .date: projects.sort { $0.createdAt > $1.createdAt }
+                  case .size: projects.sort { $0.code.count > $1.code.count }
+                  }
+                  save()
+              }
+
+              // MARK: - Real JSON backup export / import (actual file I/O, no simulation)
+              func exportBackupData() -> Data? {
+                  let encoder = JSONEncoder()
+                  encoder.dateEncodingStrategy = .iso8601
+                  encoder.outputFormatting = .prettyPrinted
+                  return try? encoder.encode(projects)
+              }
+
+              @discardableResult
+              func importBackup(from data: Data) -> Int {
+                  let decoder = JSONDecoder()
+                  decoder.dateDecodingStrategy = .iso8601
+                  guard let imported = try? decoder.decode([CodeProject].self, from: data) else { return 0 }
+                  let existingIDs = Set(projects.map { $0.id })
+                  var added = 0
+                  for item in imported where !existingIDs.contains(item.id) {
+                      projects.append(item)
+                      added += 1
+                  }
+                  save()
+                  return added
               }
           }
           PXEOF
@@ -360,7 +447,7 @@ jobs:
           cat > SwiftAnalyzer.swift << 'PXEOF'
           import Foundation
 
-          enum Severity { case error, warning }
+          enum Severity { case error, warning, info }
 
           struct Diagnostic: Identifiable {
               let id = UUID()
@@ -369,6 +456,7 @@ jobs:
               let severity: Severity
               var badToken: String? = nil
               var suggestion: String? = nil
+              var autoFixable: Bool { badToken != nil && suggestion != nil }
           }
 
           // Static analyzer - all O(n) single/limited passes, safe for large files
@@ -380,7 +468,78 @@ jobs:
                   diags += checkUnterminatedStrings(code)
                   diags += checkEmptyFunctions(code)
                   diags += checkTypos(code)
+                  diags += checkForceUnwraps(code)
+                  diags += checkLongLines(code)
+                  diags += checkTodoMarkers(code)
+                  diags += checkUnusedLocals(code)
                   return diags.sorted { $0.line < $1.line }
+              }
+
+              // Flags force-unwraps ('!') that risk a runtime crash, excluding '!=' comparisons
+              static func checkForceUnwraps(_ code: String) -> [Diagnostic] {
+                  var diags: [Diagnostic] = []
+                  guard let regex = try? NSRegularExpression(pattern: "[A-Za-z0-9_\\)\\]]!(?!=)") else { return diags }
+                  let ns = code as NSString
+                  let matches = regex.matches(in: code, range: NSRange(location: 0, length: ns.length))
+                  for m in matches {
+                      let prefix = ns.substring(to: m.range.location)
+                      let lineNum = prefix.components(separatedBy: "\n").count
+                      diags.append(Diagnostic(line: lineNum, message: "استخدام '!' للفك القسري قد يسبب انهيار التطبيق — يفضل if let / guard let", severity: .warning))
+                  }
+                  return diags
+              }
+
+              // Flags overly long lines (readability / style)
+              static func checkLongLines(_ code: String) -> [Diagnostic] {
+                  var diags: [Diagnostic] = []
+                  let lines = code.components(separatedBy: "\n")
+                  for (idx, line) in lines.enumerated() where line.count > 120 {
+                      diags.append(Diagnostic(line: idx + 1, message: "السطر طويل جدًا (\(line.count) حرف) — يفضل تقسيمه", severity: .warning))
+                  }
+                  return diags
+              }
+
+              // Surfaces TODO / FIXME markers as informational notes for quick navigation
+              static func checkTodoMarkers(_ code: String) -> [Diagnostic] {
+                  var diags: [Diagnostic] = []
+                  guard let regex = try? NSRegularExpression(pattern: "//\\s*(TODO|FIXME)[:\\s]?(.*)") else { return diags }
+                  let ns = code as NSString
+                  let matches = regex.matches(in: code, range: NSRange(location: 0, length: ns.length))
+                  for m in matches {
+                      let prefix = ns.substring(to: m.range.location)
+                      let lineNum = prefix.components(separatedBy: "\n").count
+                      let note = m.range(at: 2).location != NSNotFound ? ns.substring(with: m.range(at: 2)).trimmingCharacters(in: .whitespaces) : ""
+                      diags.append(Diagnostic(line: lineNum, message: note.isEmpty ? "ملاحظة TODO/FIXME" : note, severity: .info))
+                  }
+                  return diags
+              }
+
+              // Heuristic unused-local-variable detector: 'let x = ...' / 'var x = ...' whose
+              // name never appears again in the file. Intentionally conservative (single scope pass).
+              static func checkUnusedLocals(_ code: String) -> [Diagnostic] {
+                  var diags: [Diagnostic] = []
+                  guard let regex = try? NSRegularExpression(pattern: "\\b(?:let|var)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*[:=]") else { return diags }
+                  let ns = code as NSString
+                  let matches = regex.matches(in: code, range: NSRange(location: 0, length: ns.length))
+                  var declLine: [String: Int] = [:]
+                  for m in matches {
+                      guard m.range(at: 1).location != NSNotFound else { continue }
+                      let name = ns.substring(with: m.range(at: 1))
+                      if name == "_" || name.count < 2 { continue }
+                      let prefix = ns.substring(to: m.range.location)
+                      let lineNum = prefix.components(separatedBy: "\n").count
+                      if declLine[name] == nil { declLine[name] = lineNum }
+                  }
+                  // Count every real identifier occurrence (declaration included) via the lexer
+                  var occurrences: [String: Int] = [:]
+                  let tokens = SwiftLexer.tokenize(code)
+                  for t in tokens where t.kind == .identifier {
+                      occurrences[t.text, default: 0] += 1
+                  }
+                  for (name, line) in declLine where (occurrences[name] ?? 0) <= 1 {
+                      diags.append(Diagnostic(line: line, message: "المتغير '\(name)' معلن ولم يُستخدم", severity: .warning))
+                  }
+                  return diags
               }
 
               static func checkBrackets(_ code: String) -> [Diagnostic] {
@@ -493,6 +652,67 @@ jobs:
                   }
                   return lines.joined(separator: "\n")
               }
+
+              // Real automatic batch-fix: applies every diagnostic that carries a concrete
+              // suggestion (currently the typo detector), re-analyzing between passes since
+              // fixing one line can shift/resolve others. Returns the corrected code + count fixed.
+              static func fixAll(_ code: String, maxPasses: Int = 5) -> (code: String, fixedCount: Int) {
+                  var current = code
+                  var totalFixed = 0
+                  for _ in 0..<maxPasses {
+                      let diags = analyze(current).filter { $0.autoFixable }
+                      if diags.isEmpty { break }
+                      for d in diags { current = applyFix(d, to: current) }
+                      totalFixed += diags.count
+                  }
+                  return (current, totalFixed)
+              }
+          }
+          PXEOF
+
+      - name: Generate Source - Templates.swift
+        run: |
+          cat > Templates.swift << 'PXEOF'
+          import Foundation
+
+          // Real, insertable Swift boilerplate. Inserted at the live cursor position via
+          // EditorActions.insertAtCursor, using the UITextView's actual insertText(_:) API.
+          enum Templates {
+              static let swiftUIView = """
+
+              struct NewView: View {
+                  var body: some View {
+                      Text("Hello")
+                  }
+              }
+
+              """
+
+              static let structTemplate = """
+
+              struct NewStruct {
+                  var property: String
+              }
+
+              """
+
+              static let classTemplate = """
+
+              final class NewClass {
+                  init() {
+
+                  }
+              }
+
+              """
+
+              static let functionTemplate = """
+
+              func newFunction() {
+
+              }
+
+              """
           }
           PXEOF
 
@@ -502,12 +722,71 @@ jobs:
           import SwiftUI
           import UIKit
 
+          // Real controller exposing the underlying UITextView's actual UndoManager and
+          // cursor-relative text insertion, so Undo/Redo/Templates operate on genuine
+          // UIKit text-editing state rather than a simulated stack.
+          final class EditorActions: ObservableObject {
+              weak var textView: UITextView?
+
+              var canUndo: Bool { textView?.undoManager?.canUndo ?? false }
+              var canRedo: Bool { textView?.undoManager?.canRedo ?? false }
+
+              func undo() { textView?.undoManager?.undo() }
+              func redo() { textView?.undoManager?.redo() }
+
+              func insertAtCursor(_ snippet: String) {
+                  guard let tv = textView else { return }
+                  tv.becomeFirstResponder()
+                  tv.insertText(snippet)
+              }
+
+              func setFontSize(_ size: CGFloat) {
+                  guard let tv = textView else { return }
+                  tv.font = UIFont.monospacedSystemFont(ofSize: size, weight: .regular)
+              }
+          }
+
+          // Real line-number gutter drawn from the text view's own NSLayoutManager,
+          // so numbers always match the actual wrapped line fragments on screen.
+          final class LineNumberGutterView: UIView {
+              weak var textView: UITextView?
+
+              override func draw(_ rect: CGRect) {
+                  guard let tv = textView, let layoutManager = tv.layoutManager as NSLayoutManager? else { return }
+                  let textContainer = tv.textContainer
+                  let visibleRect = CGRect(origin: tv.contentOffset, size: tv.bounds.size)
+                  let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
+                  let text = tv.text as NSString? ?? ""
+                  var lineNumber = 1
+                  if glyphRange.location > 0 {
+                      let charIndexAtStart = layoutManager.characterIndexForGlyph(at: glyphRange.location)
+                      lineNumber = text.substring(to: min(charIndexAtStart, text.length)).components(separatedBy: "\n").count
+                  }
+                  let paragraphStyle: [NSAttributedString.Key: Any] = [
+                      .font: UIFont.monospacedSystemFont(ofSize: 11, weight: .regular),
+                      .foregroundColor: UIColor(white: 0.45, alpha: 1)
+                  ]
+                  layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { rectF, _, _, effectiveRange, _ in
+                      let charIndex = layoutManager.characterIndexForGlyph(at: effectiveRange.location)
+                      let isRealLineStart = charIndex == 0 || (charIndex > 0 && text.character(at: charIndex - 1) == 10)
+                      if isRealLineStart {
+                          let y = rectF.minY - tv.contentOffset.y + tv.textContainerInset.top
+                          let label = "\(lineNumber)" as NSString
+                          label.draw(at: CGPoint(x: self.bounds.width - label.size(withAttributes: paragraphStyle).width - 4, y: y), withAttributes: paragraphStyle)
+                          lineNumber += 1
+                      }
+                  }
+              }
+          }
+
           // High-performance code editor backed by a real UITextView.
           // Highlighting runs debounced + off the main thread so typing never lags,
           // even on files well beyond 10,000 lines.
           final class HighlightingTextView: UITextView, UITextViewDelegate {
               var onTextChange: ((String) -> Void)?
               private var debounceWorkItem: DispatchWorkItem?
+              let gutter = LineNumberGutterView()
+              var showsGutter = true
 
               func configure() {
                   delegate = self
@@ -517,9 +796,28 @@ jobs:
                   smartQuotesType = .no
                   smartDashesType = .no
                   smartInsertDeleteType = .no
-                  textContainerInset = UIEdgeInsets(top: 10, left: 6, bottom: 10, right: 6)
+                  textContainerInset = UIEdgeInsets(top: 10, left: showsGutter ? 34 : 6, bottom: 10, right: 6)
                   font = UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
                   textColor = UIColor(white: 0.85, alpha: 1)
+                  gutter.backgroundColor = .clear
+                  gutter.isUserInteractionEnabled = false
+                  gutter.textView = self
+                  addSubview(gutter)
+              }
+
+              override func layoutSubviews() {
+                  super.layoutSubviews()
+                  gutter.frame = CGRect(x: contentOffset.x, y: contentOffset.y, width: 30, height: bounds.height)
+                  gutter.setNeedsDisplay()
+              }
+
+              override var contentOffset: CGPoint {
+                  get { super.contentOffset }
+                  set {
+                      super.contentOffset = newValue
+                      gutter.frame = CGRect(x: newValue.x, y: newValue.y, width: 30, height: bounds.height)
+                      gutter.setNeedsDisplay()
+                  }
               }
 
               func scheduleHighlight() {
@@ -541,6 +839,7 @@ jobs:
                           if saved.location <= (self.text as NSString).length {
                               self.selectedRange = saved
                           }
+                          self.gutter.setNeedsDisplay()
                       }
                   }
               }
@@ -596,16 +895,20 @@ jobs:
               @Binding var text: String
               var isEditable: Bool = true
               @Binding var scrollToRange: NSRange?
+              var actions: EditorActions? = nil
+              var fontSize: CGFloat = 13
 
               func makeUIView(context: Context) -> HighlightingTextView {
                   let tv = HighlightingTextView()
                   tv.configure()
                   tv.isEditable = isEditable
                   tv.text = text
+                  tv.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
                   tv.onTextChange = { newText in
                       if self.text != newText { self.text = newText }
                   }
                   tv.applyHighlighting()
+                  actions?.textView = tv
                   return tv
               }
 
@@ -614,10 +917,15 @@ jobs:
                       uiView.text = text
                       uiView.applyHighlighting()
                   }
+                  if uiView.font?.pointSize != fontSize {
+                      uiView.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+                      uiView.applyHighlighting()
+                  }
                   if let range = scrollToRange {
                       uiView.jump(to: range)
                       DispatchQueue.main.async { scrollToRange = nil }
                   }
+                  actions?.textView = uiView
               }
           }
 
@@ -627,6 +935,42 @@ jobs:
                   UIActivityViewController(activityItems: items, applicationActivities: nil)
               }
               func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+          }
+          PXEOF
+
+      - name: Generate Source - DocumentPicker.swift
+        run: |
+          cat > DocumentPicker.swift << 'PXEOF'
+          import SwiftUI
+          import UniformTypeIdentifiers
+
+          // Real system document picker (UIDocumentPickerViewController) used to import
+          // an actual JSON backup file selected by the user from Files / iCloud Drive.
+          struct DocumentPicker: UIViewControllerRepresentable {
+              var onPick: (URL) -> Void
+
+              func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
+
+              func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+                  let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.json])
+                  picker.allowsMultipleSelection = false
+                  picker.delegate = context.coordinator
+                  return picker
+              }
+
+              func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+              final class Coordinator: NSObject, UIDocumentPickerDelegate {
+                  let onPick: (URL) -> Void
+                  init(onPick: @escaping (URL) -> Void) { self.onPick = onPick }
+
+                  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+                      guard let url = urls.first else { return }
+                      let accessed = url.startAccessingSecurityScopedResource()
+                      defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                      onPick(url)
+                  }
+              }
           }
           PXEOF
 
@@ -669,9 +1013,27 @@ jobs:
               @ObservedObject var loc = LocalizationManager.shared
               var onApplyFix: (Diagnostic) -> Void
               var onJump: (Diagnostic) -> Void
+              var onFixAll: () -> Void
 
               private var errorCount: Int { diagnostics.filter { $0.severity == .error }.count }
               private var warningCount: Int { diagnostics.filter { $0.severity == .warning }.count }
+              private var infoCount: Int { diagnostics.filter { $0.severity == .info }.count }
+              private var fixableCount: Int { diagnostics.filter { $0.autoFixable }.count }
+
+              private func icon(for s: Severity) -> String {
+                  switch s {
+                  case .error: return "xmark.octagon.fill"
+                  case .warning: return "exclamationmark.triangle.fill"
+                  case .info: return "info.circle.fill"
+                  }
+              }
+              private func color(for s: Severity) -> Color {
+                  switch s {
+                  case .error: return .red
+                  case .warning: return .yellow
+                  case .info: return .blue
+                  }
+              }
 
               var body: some View {
                   VStack(alignment: .leading, spacing: 10) {
@@ -681,16 +1043,25 @@ jobs:
                           if !diagnostics.isEmpty {
                               Label("\(errorCount)", systemImage: "xmark.octagon.fill").foregroundColor(.red).font(.caption)
                               Label("\(warningCount)", systemImage: "exclamationmark.triangle.fill").foregroundColor(.yellow).font(.caption)
+                              Label("\(infoCount)", systemImage: "info.circle.fill").foregroundColor(.blue).font(.caption)
                           }
                       }
                       if diagnostics.isEmpty {
                           Label(loc.t("build_succeeded"), systemImage: "checkmark.circle.fill")
                               .foregroundColor(.green).font(.subheadline)
                       } else {
+                          if fixableCount > 0 {
+                              Button {
+                                  onFixAll()
+                              } label: {
+                                  Label("\(loc.t("fix_all")) (\(fixableCount))", systemImage: "wand.and.stars")
+                              }
+                              .font(.caption).buttonStyle(.borderedProminent).tint(.indigo)
+                          }
                           ForEach(diagnostics) { d in
                               HStack(alignment: .top, spacing: 8) {
-                                  Image(systemName: d.severity == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
-                                      .foregroundColor(d.severity == .error ? .red : .yellow)
+                                  Image(systemName: icon(for: d.severity))
+                                      .foregroundColor(color(for: d.severity))
                                   VStack(alignment: .leading, spacing: 4) {
                                       Text("\(loc.t("line_label")) \(d.line): \(d.message)").font(.caption)
                                       HStack {
@@ -728,6 +1099,8 @@ jobs:
               @State private var name: String = ""
               @State private var code: String = ""
               @State private var scrollRange: NSRange? = nil
+              @StateObject private var editorActions = EditorActions()
+              @State private var fontSize: CGFloat = 13
 
               var body: some View {
                   NavigationStack {
@@ -735,7 +1108,27 @@ jobs:
                           TextField(loc.t("project_name"), text: $name)
                               .textFieldStyle(.roundedBorder)
                               .padding()
-                          CodeEditorView(text: $code, isEditable: true, scrollToRange: $scrollRange)
+                          HStack(spacing: 14) {
+                              Button { editorActions.undo() } label: { Image(systemName: "arrow.uturn.backward.circle") }
+                              Button { editorActions.redo() } label: { Image(systemName: "arrow.uturn.forward.circle") }
+                              Divider().frame(height: 18)
+                              Button { fontSize = max(10, fontSize - 1) } label: { Image(systemName: "textformat.size.smaller") }
+                              Text("\(Int(fontSize))").font(.caption).foregroundColor(.gray).frame(width: 20)
+                              Button { fontSize = min(24, fontSize + 1) } label: { Image(systemName: "textformat.size.larger") }
+                              Divider().frame(height: 18)
+                              Menu {
+                                  Button(loc.t("tpl_view")) { editorActions.insertAtCursor(Templates.swiftUIView) }
+                                  Button(loc.t("tpl_struct")) { editorActions.insertAtCursor(Templates.structTemplate) }
+                                  Button(loc.t("tpl_class")) { editorActions.insertAtCursor(Templates.classTemplate) }
+                                  Button(loc.t("tpl_function")) { editorActions.insertAtCursor(Templates.functionTemplate) }
+                              } label: {
+                                  Label(loc.t("templates"), systemImage: "text.badge.plus")
+                              }
+                              Spacer()
+                          }
+                          .font(.subheadline)
+                          .padding(.horizontal)
+                          CodeEditorView(text: $code, isEditable: true, scrollToRange: $scrollRange, actions: editorActions, fontSize: fontSize)
                       }
                       .navigationTitle(loc.t("add_project"))
                       .toolbar {
@@ -771,11 +1164,15 @@ jobs:
               @State private var scrollRange: NSRange? = nil
               @State private var showSearch = false
               @State private var searchQuery = ""
+              @State private var replaceQuery = ""
               @State private var matchRanges: [NSRange] = []
               @State private var currentMatch = 0
               @State private var showShare = false
               @State private var shareURL: URL? = nil
               @State private var saveDebounce: DispatchWorkItem? = nil
+              @StateObject private var editorActions = EditorActions()
+              @State private var fontSize: CGFloat = 13
+              @State private var fixedToast: Int? = nil
 
               private var dateString: String {
                   let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .short
@@ -795,9 +1192,11 @@ jobs:
                           }
 
                           Text(loc.t("editor")).font(.subheadline).foregroundColor(.gray)
-                          CodeEditorView(text: $project.code, isEditable: true, scrollToRange: $scrollRange)
+                          CodeEditorView(text: $project.code, isEditable: true, scrollToRange: $scrollRange, actions: editorActions, fontSize: fontSize)
                               .frame(height: 320)
                               .onChange(of: project.code) { _ in scheduleSave() }
+
+                          editorToolbar
 
                           HStack(spacing: 12) {
                               Button {
@@ -819,6 +1218,11 @@ jobs:
                           }
                           .padding(.horizontal)
 
+                          if let fixed = fixedToast {
+                              Text("\(loc.t("fixed_count")) \(fixed) \(loc.t("issues_word"))")
+                                  .font(.caption).foregroundColor(.green)
+                          }
+
                           if hasBuilt {
                               BuildResultsView(diagnostics: diagnostics) { diag in
                                   project.code = SwiftAnalyzer.applyFix(diag, to: project.code)
@@ -827,6 +1231,8 @@ jobs:
                                   if let r = SwiftLexer.nsRange(forLine: diag.line, in: project.code) {
                                       scrollRange = r
                                   }
+                              } onFixAll: {
+                                  runFixAll()
                               }
                           }
 
@@ -864,12 +1270,58 @@ jobs:
                           Button { jumpMatch(-1) } label: { Image(systemName: "chevron.up") }
                           Button { jumpMatch(1) } label: { Image(systemName: "chevron.down") }
                       }
+                      HStack {
+                          TextField(loc.t("replace_with"), text: $replaceQuery)
+                              .textFieldStyle(.roundedBorder)
+                          Button(loc.t("replace_all")) { replaceAll() }
+                              .buttonStyle(.bordered)
+                              .disabled(searchQuery.isEmpty || matchRanges.isEmpty)
+                      }
                       if !searchQuery.isEmpty {
                           Text(matchRanges.isEmpty ? loc.t("no_matches") : "\(matchRanges.count) \(loc.t("matches"))")
                               .font(.caption2).foregroundColor(.gray)
                       }
                   }
                   .padding(.horizontal)
+              }
+
+              // Real editor toolbar backed by the UITextView's own UndoManager,
+              // a genuine font-size change, and real text-insertion templates.
+              private var editorToolbar: some View {
+                  HStack(spacing: 14) {
+                      Button { editorActions.undo() } label: { Image(systemName: "arrow.uturn.backward.circle") }
+                      Button { editorActions.redo() } label: { Image(systemName: "arrow.uturn.forward.circle") }
+                      Divider().frame(height: 18)
+                      Button { fontSize = max(10, fontSize - 1) } label: { Image(systemName: "textformat.size.smaller") }
+                      Text("\(Int(fontSize))").font(.caption).foregroundColor(.gray).frame(width: 20)
+                      Button { fontSize = min(24, fontSize + 1) } label: { Image(systemName: "textformat.size.larger") }
+                      Divider().frame(height: 18)
+                      Menu {
+                          Button(loc.t("tpl_view")) { editorActions.insertAtCursor(Templates.swiftUIView) }
+                          Button(loc.t("tpl_struct")) { editorActions.insertAtCursor(Templates.structTemplate) }
+                          Button(loc.t("tpl_class")) { editorActions.insertAtCursor(Templates.classTemplate) }
+                          Button(loc.t("tpl_function")) { editorActions.insertAtCursor(Templates.functionTemplate) }
+                      } label: {
+                          Label(loc.t("templates"), systemImage: "text.badge.plus")
+                      }
+                      Spacer()
+                  }
+                  .font(.subheadline)
+                  .padding(.horizontal)
+              }
+
+              private func replaceAll() {
+                  guard !searchQuery.isEmpty else { return }
+                  project.code = project.code.replacingOccurrences(of: searchQuery, with: replaceQuery, options: .caseInsensitive)
+                  performSearch()
+              }
+
+              private func runFixAll() {
+                  let result = SwiftAnalyzer.fixAll(project.code)
+                  project.code = result.code
+                  fixedToast = result.fixedCount
+                  runBuild()
+                  DispatchQueue.main.asyncAfter(deadline: .now() + 3) { fixedToast = nil }
               }
 
               private func performSearch() {
@@ -937,6 +1389,12 @@ jobs:
               @ObservedObject var store: ProjectsStore
               @ObservedObject var loc = LocalizationManager.shared
               @State private var showAdd = false
+              @State private var renameTarget: CodeProject? = nil
+              @State private var renameText: String = ""
+              @State private var showExport = false
+              @State private var exportURL: URL? = nil
+              @State private var showImportPicker = false
+              @State private var importAlertMessage: String? = nil
 
               var body: some View {
                   NavigationStack {
@@ -957,6 +1415,21 @@ jobs:
                                                   .font(.caption).foregroundColor(.gray)
                                           }
                                       }
+                                      .contextMenu {
+                                          Button { renameText = project.name; renameTarget = project } label: {
+                                              Label(loc.t("rename"), systemImage: "pencil")
+                                          }
+                                          Button { store.duplicate(project) } label: {
+                                              Label(loc.t("duplicate"), systemImage: "doc.on.doc")
+                                          }
+                                          Button(role: .destructive) {
+                                              if let idx = store.projects.firstIndex(where: { $0.id == project.id }) {
+                                                  store.delete(at: IndexSet(integer: idx))
+                                              }
+                                          } label: {
+                                              Label(loc.t("delete"), systemImage: "trash")
+                                          }
+                                      }
                                   }
                                   .onDelete(perform: store.delete)
                               }
@@ -967,11 +1440,69 @@ jobs:
                           ToolbarItem(placement: .primaryAction) {
                               Button { showAdd = true } label: { Image(systemName: "plus.circle.fill") }
                           }
+                          ToolbarItem(placement: .navigationBarLeading) {
+                              Menu {
+                                  Menu(loc.t("sort_by")) {
+                                      Button(loc.t("sort_name")) { store.sort(by: .name) }
+                                      Button(loc.t("sort_date")) { store.sort(by: .date) }
+                                      Button(loc.t("sort_size")) { store.sort(by: .size) }
+                                  }
+                                  Button { exportBackup() } label: {
+                                      Label(loc.t("backup_export"), systemImage: "square.and.arrow.up")
+                                  }
+                                  Button { showImportPicker = true } label: {
+                                      Label(loc.t("backup_import"), systemImage: "square.and.arrow.down")
+                                  }
+                              } label: {
+                                  Image(systemName: "ellipsis.circle")
+                              }
+                          }
                       }
                       .sheet(isPresented: $showAdd) { AddProjectView(store: store) }
+                      .sheet(isPresented: $showExport) {
+                          if let url = exportURL { ActivityView(items: [url]) }
+                      }
+                      .sheet(isPresented: $showImportPicker) {
+                          DocumentPicker { url in importBackup(from: url) }
+                      }
+                      .alert(loc.t("rename"), isPresented: Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })) {
+                          TextField(loc.t("new_name"), text: $renameText)
+                          Button(loc.t("cancel"), role: .cancel) { renameTarget = nil }
+                          Button(loc.t("save")) {
+                              if let target = renameTarget { store.rename(target, to: renameText) }
+                              renameTarget = nil
+                          }
+                      }
+                      .alert(item: Binding(
+                          get: { importAlertMessage.map { IdentifiableString(value: $0) } },
+                          set: { importAlertMessage = $0?.value }
+                      )) { wrapped in
+                          Alert(title: Text(wrapped.value))
+                      }
                   }
                   .environment(\.layoutDirection, loc.language.layoutDirection)
               }
+
+              private func exportBackup() {
+                  guard let data = store.exportBackupData() else { return }
+                  let url = FileManager.default.temporaryDirectory.appendingPathComponent("previewx_backup.json")
+                  try? data.write(to: url, options: .atomic)
+                  exportURL = url
+                  showExport = true
+              }
+
+              private func importBackup(from url: URL) {
+                  guard let data = try? Data(contentsOf: url) else {
+                      importAlertMessage = loc.t("import_failed"); return
+                  }
+                  let added = store.importBackup(from: data)
+                  importAlertMessage = added > 0 ? "\(loc.t("import_success")) (\(added))" : loc.t("import_failed")
+              }
+          }
+
+          struct IdentifiableString: Identifiable {
+              let id = UUID()
+              let value: String
           }
           PXEOF
 
@@ -1043,7 +1574,9 @@ jobs:
             SwiftLexer.swift \
             SwiftHighlighter.swift \
             SwiftAnalyzer.swift \
+            Templates.swift \
             CodeEditorView.swift \
+            DocumentPicker.swift \
             PhoneFrameView.swift \
             BuildResultsView.swift \
             AddProjectView.swift \
@@ -1079,5 +1612,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PreviewX-Swift-Pro-IPA-v3
+          name: PreviewX-Swift-Pro-IPA-v3.1
           path: artifacts/PreviewX.ipa
